@@ -1,0 +1,5 @@
+bin/
+git-manager
+config.yml
+git-manager.yml
+projects.yml

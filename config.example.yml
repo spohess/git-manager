@@ -1,0 +1,13 @@
+projects:
+  - name: backend
+    path: /Users/sergio/projects/backend
+    main: true
+    commit-sufixo: teste-teste-teste
+
+  - name: admin
+    path: /Users/sergio/projects/frontend-admin
+    main: true
+
+  - name: client
+    path: /Users/sergio/projects/frontend-client
+    main: false
