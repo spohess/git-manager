@@ -40,7 +40,13 @@ func runCheckout(ctx *Context) error {
 		return fmt.Errorf("a branch %s não existe localmente nem em %s; use a tarefa new para criá-la", branch, repo.Remote)
 	}
 
-	ui.Success("branch %s em uso", branch)
-	ctx.note("checkout na branch %s", branch)
+	ui.Step("merge de %s em %s", mainBranch, branch)
+	if err := repo.Merge(mainBranch); err != nil {
+		ctx.note("checkout na branch %s (merge de %s em conflito, resolva manualmente)", branch, mainBranch)
+		return fmt.Errorf("merge de %s em %s ficou com conflitos, resolva manualmente e finalize o commit: %w", mainBranch, branch, err)
+	}
+
+	ui.Success("branch %s em uso e atualizada com %s", branch, mainBranch)
+	ctx.note("checkout na branch %s (atualizada com %s)", branch, mainBranch)
 	return nil
 }

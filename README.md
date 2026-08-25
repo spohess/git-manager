@@ -76,6 +76,22 @@ execução inteira.
 
 ### Tarefas
 
+#### `status`
+
+Não altera nada no repositório: faz `git fetch --prune origin` (para o
+ahead/behind refletir o remoto) e mostra, para a branch atual:
+
+- se está limpa ou o número de arquivos alterados (staged, não staged, não
+  rastreados e em conflito);
+- a situação com o upstream (`origin/<branch>`): em dia, sem upstream
+  configurado, ou quantos commits à frente/atrás;
+- quando a branch atual não é a principal: quantos commits à frente/atrás ela
+  está de `origin/<principal>`.
+
+```bash
+git-manager status --no-main
+```
+
 #### `update`
 
 1. `git fetch --prune origin`;
@@ -105,6 +121,13 @@ branch informada:
 1. se ela existir localmente: `git checkout <nome>`;
 2. senão, se existir em `origin`: `git checkout -b <nome> --track origin/<nome>`;
 3. se não existir em nenhum dos dois, a tarefa falha e indica o uso do `new`.
+
+Depois do checkout, a branch principal é mesclada nela com
+`git merge --no-edit <principal>`, para que a branch destino também fique
+atualizada (não só a principal). A mensagem do merge é gerada automaticamente
+pelo git, sem abrir editor. Se o merge gerar conflito, a tarefa falha e o
+merge fica em andamento para resolução manual (resolva os conflitos e finalize
+com `git commit`, como em qualquer merge normal).
 
 Informar a própria branch principal é aceito: o `update` já deixa o repositório
 nela, atualizada.

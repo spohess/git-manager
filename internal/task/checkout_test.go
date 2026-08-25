@@ -1,6 +1,10 @@
 package task
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func checkoutContext(path, branch string) *Context {
 	ctx := newContext(path)
@@ -84,5 +88,72 @@ func TestCheckoutExigeBranch(t *testing.T) {
 
 	if err := runCheckout(checkoutContext(work, "")); err == nil {
 		t.Error("esperado erro sem --branch")
+	}
+}
+
+func TestCheckoutTrazAtualizacoesDaMainParaBranchDestino(t *testing.T) {
+	origin, work := newSandbox(t)
+
+	gitRun(t, work, "checkout", "-b", "feature/y")
+	writeFile(t, work, "feature.txt", "trabalho da feature\n")
+	gitRun(t, work, "add", ".")
+	gitRun(t, work, "commit", "-m", "feature")
+	gitRun(t, work, "push", "--set-upstream", "origin", "feature/y")
+	gitRun(t, work, "checkout", "main")
+
+	outro := filepath.Join(filepath.Dir(work), "outro")
+	gitRun(t, filepath.Dir(work), "clone", origin, outro)
+	gitRun(t, outro, "config", "user.email", "teste@exemplo.com")
+	gitRun(t, outro, "config", "user.name", "Teste")
+	writeFile(t, outro, "novo-na-main.txt", "vindo da main\n")
+	gitRun(t, outro, "add", ".")
+	gitRun(t, outro, "commit", "-m", "novidade na main")
+	gitRun(t, outro, "push", "origin", "main")
+
+	if err := runCheckout(checkoutContext(work, "feature/y")); err != nil {
+		t.Fatalf("checkout: %v", err)
+	}
+
+	if branch := gitRun(t, work, "rev-parse", "--abbrev-ref", "HEAD"); branch != "feature/y" {
+		t.Errorf("branch atual = %q, esperado feature/y", branch)
+	}
+	if _, err := os.Stat(filepath.Join(work, "novo-na-main.txt")); err != nil {
+		t.Errorf("a atualização da main não chegou na branch destino: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(work, "feature.txt")); err != nil {
+		t.Errorf("o arquivo da feature deveria continuar presente: %v", err)
+	}
+}
+
+func TestCheckoutDeixaConflitoParaResolucaoManual(t *testing.T) {
+	origin, work := newSandbox(t)
+
+	gitRun(t, work, "checkout", "-b", "feature/conflito")
+	writeFile(t, work, "README.md", "alteração da feature\n")
+	gitRun(t, work, "add", ".")
+	gitRun(t, work, "commit", "-m", "feature")
+	gitRun(t, work, "push", "--set-upstream", "origin", "feature/conflito")
+	gitRun(t, work, "checkout", "main")
+
+	outro := filepath.Join(filepath.Dir(work), "outro")
+	gitRun(t, filepath.Dir(work), "clone", origin, outro)
+	gitRun(t, outro, "config", "user.email", "teste@exemplo.com")
+	gitRun(t, outro, "config", "user.name", "Teste")
+	writeFile(t, outro, "README.md", "alteração conflitante na main\n")
+	gitRun(t, outro, "add", ".")
+	gitRun(t, outro, "commit", "-m", "conflito na main")
+	gitRun(t, outro, "push", "origin", "main")
+
+	err := runCheckout(checkoutContext(work, "feature/conflito"))
+	if err == nil {
+		t.Fatal("esperado erro de conflito no merge")
+	}
+
+	if branch := gitRun(t, work, "rev-parse", "--abbrev-ref", "HEAD"); branch != "feature/conflito" {
+		t.Errorf("branch atual = %q, esperado feature/conflito", branch)
+	}
+	mergeHead := filepath.Join(work, ".git", "MERGE_HEAD")
+	if _, statErr := os.Stat(mergeHead); statErr != nil {
+		t.Errorf("merge deveria continuar em andamento para resolução manual: %v", statErr)
 	}
 }

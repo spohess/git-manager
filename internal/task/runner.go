@@ -41,6 +41,7 @@ type definition struct {
 }
 
 var definitions = map[string]definition{
+	"status":   {run: runStatus, summary: "mostra o status atual do repositório (branch, alterações locais e sincronismo com o remoto)", needsRemote: true, requiresRepo: true},
 	"update":   {run: runUpdate, summary: "checkout na branch principal e pull, preservando o trabalho local", needsRemote: true, requiresRepo: true},
 	"new":      {run: runNew, summary: "executa o update e cria uma nova branch (--branch=nome)", needsBranch: true, needsRemote: true, requiresRepo: true},
 	"checkout": {run: runCheckout, summary: "executa o update e faz checkout na branch informada (--branch=nome)", needsBranch: true, needsRemote: true, requiresRepo: true},

@@ -127,6 +127,7 @@ Configuração:
   (git-manager.yml, projects.yml, config.yml) e em ~/.config/git-manager/config.yml.
 
 Exemplos:
+  git-manager status
   git-manager update
   git-manager update --no-main
   git-manager new --branch=feature/login --project=backend

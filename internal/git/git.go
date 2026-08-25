@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 
 	"git-manager/internal/ui"
@@ -173,6 +174,10 @@ func (c *Client) Pull(branch string) error {
 	return c.mutate("pull", c.Remote, branch)
 }
 
+func (c *Client) Merge(branch string) error {
+	return c.mutate("merge", "--no-edit", branch)
+}
+
 func (c *Client) ResetHardRemote(branch string) error {
 	return c.mutate("reset", "--hard", c.Remote+"/"+branch)
 }
@@ -217,6 +222,93 @@ func (c *Client) HasCommitsAhead(base, branch string) bool {
 		return true
 	}
 	return out != "0"
+}
+
+type StatusInfo struct {
+	Branch    string
+	Detached  bool
+	Upstream  string
+	Ahead     int
+	Behind    int
+	Staged    int
+	Unstaged  int
+	Untracked int
+	Conflicts int
+}
+
+func (s StatusInfo) Changed() int {
+	return s.Staged + s.Unstaged + s.Untracked + s.Conflicts
+}
+
+func (s StatusInfo) Clean() bool {
+	return s.Changed() == 0
+}
+
+func (c *Client) Status() (StatusInfo, error) {
+	out, err := c.capture("status", "--porcelain=v2", "--branch")
+	if err != nil {
+		return StatusInfo{}, err
+	}
+
+	var info StatusInfo
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(line, "# branch.head "):
+			info.Branch = strings.TrimPrefix(line, "# branch.head ")
+			info.Detached = info.Branch == "(detached)"
+		case strings.HasPrefix(line, "# branch.upstream "):
+			info.Upstream = strings.TrimPrefix(line, "# branch.upstream ")
+		case strings.HasPrefix(line, "# branch.ab "):
+			for _, field := range strings.Fields(strings.TrimPrefix(line, "# branch.ab ")) {
+				n, err := strconv.Atoi(strings.TrimLeft(field, "+-"))
+				if err != nil {
+					continue
+				}
+				if strings.HasPrefix(field, "+") {
+					info.Ahead = n
+				} else if strings.HasPrefix(field, "-") {
+					info.Behind = n
+				}
+			}
+		case strings.HasPrefix(line, "1 "), strings.HasPrefix(line, "2 "):
+			fields := strings.Fields(line)
+			if len(fields) < 2 || len(fields[1]) != 2 {
+				continue
+			}
+			if fields[1][0] != '.' {
+				info.Staged++
+			}
+			if fields[1][1] != '.' {
+				info.Unstaged++
+			}
+		case strings.HasPrefix(line, "u "):
+			info.Conflicts++
+		case strings.HasPrefix(line, "? "):
+			info.Untracked++
+		}
+	}
+	return info, nil
+}
+
+func (c *Client) AheadBehind(base, branch string) (ahead, behind int, err error) {
+	out, err := c.capture("rev-list", "--left-right", "--count", base+"..."+branch)
+	if err != nil {
+		return 0, 0, err
+	}
+	fields := strings.Fields(out)
+	if len(fields) != 2 {
+		return 0, 0, fmt.Errorf("saída inesperada de rev-list --left-right --count: %q", out)
+	}
+	if behind, err = strconv.Atoi(fields[0]); err != nil {
+		return 0, 0, err
+	}
+	if ahead, err = strconv.Atoi(fields[1]); err != nil {
+		return 0, 0, err
+	}
+	return ahead, behind, nil
 }
 
 func Available() error {
