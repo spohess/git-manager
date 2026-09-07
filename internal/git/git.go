@@ -183,11 +183,11 @@ func (c *Client) ResetHardRemote(branch string) error {
 }
 
 func (c *Client) Push(branch string) error {
-	return c.mutate("push", "--set-upstream", c.Remote, branch)
+	return c.mutate("push", "--no-verify", "--set-upstream", c.Remote, branch)
 }
 
 func (c *Client) ForcePush(branch string) error {
-	return c.mutate("push", "--force", "--set-upstream", c.Remote, branch)
+	return c.mutate("push", "--no-verify", "--force", "--set-upstream", c.Remote, branch)
 }
 
 func (c *Client) GoneBranches() ([]string, error) {
