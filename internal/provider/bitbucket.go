@@ -15,6 +15,7 @@ import (
 )
 
 const (
+	BitbucketEmailEnv = "BITBUCKET_EMAIL"
 	BitbucketTokenEnv = "BITBUCKET_TOKEN"
 	bitbucketHost     = "bitbucket.org"
 	bitbucketAPI      = "https://api.bitbucket.org/2.0"
@@ -24,6 +25,7 @@ const (
 type Bitbucket struct {
 	workspace string
 	slug      string
+	email     string
 	token     string
 	api       string
 	client    *http.Client
@@ -74,7 +76,7 @@ type bitbucketError struct {
 	} `json:"error"`
 }
 
-func NewBitbucket(remoteURL, token string) (*Bitbucket, error) {
+func NewBitbucket(remoteURL, email, token string) (*Bitbucket, error) {
 	workspace, slug, err := ParseBitbucketRemote(remoteURL)
 	if err != nil {
 		return nil, err
@@ -82,6 +84,7 @@ func NewBitbucket(remoteURL, token string) (*Bitbucket, error) {
 	return &Bitbucket{
 		workspace: workspace,
 		slug:      slug,
+		email:     strings.TrimSpace(email),
 		token:     strings.TrimSpace(token),
 		api:       bitbucketAPI,
 		client:    &http.Client{Timeout: bitbucketTimeout},
@@ -128,7 +131,7 @@ func (b *Bitbucket) request(method, endpoint string, payload any, out any) error
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+b.token)
+	req.SetBasicAuth(b.email, b.token)
 	req.Header.Set("Accept", "application/json")
 	if payload != nil {
 		req.Header.Set("Content-Type", "application/json")

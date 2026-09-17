@@ -22,6 +22,7 @@ type Project struct {
 }
 
 type Bitbucket struct {
+	Email string `yaml:"email"`
 	Token string `yaml:"token"`
 }
 
@@ -78,10 +79,8 @@ func Parse(data []byte) (*Config, error) {
 	if len(cfg.Projects) == 0 {
 		return nil, fmt.Errorf("nenhum projeto declarado na chave \"projects\"")
 	}
-	cfg.Bitbucket.Token = strings.TrimSpace(os.ExpandEnv(cfg.Bitbucket.Token))
-	if cfg.Bitbucket.Token == "" {
-		cfg.Bitbucket.Token = strings.TrimSpace(os.Getenv(provider.BitbucketTokenEnv))
-	}
+	cfg.Bitbucket.Email = fromConfigOrEnv(cfg.Bitbucket.Email, provider.BitbucketEmailEnv)
+	cfg.Bitbucket.Token = fromConfigOrEnv(cfg.Bitbucket.Token, provider.BitbucketTokenEnv)
 	seen := make(map[string]bool, len(cfg.Projects))
 	for i := range cfg.Projects {
 		p := &cfg.Projects[i]
@@ -110,6 +109,14 @@ func Parse(data []byte) (*Config, error) {
 		p.Path = expanded
 	}
 	return &cfg, nil
+}
+
+func fromConfigOrEnv(raw, env string) string {
+	value := strings.TrimSpace(os.ExpandEnv(raw))
+	if value == "" {
+		value = strings.TrimSpace(os.Getenv(env))
+	}
+	return value
 }
 
 func normalizeProvider(raw string) (string, error) {

@@ -175,7 +175,7 @@ func checkProviders(cfg *config.Config, projects []config.Project) error {
 			continue
 		}
 		checked[project.Provider] = true
-		if err := provider.Available(project.Provider, cfg.Bitbucket.Token); err != nil {
+		if err := provider.Available(project.Provider, cfg.Bitbucket.Email, cfg.Bitbucket.Token); err != nil {
 			return err
 		}
 	}
@@ -206,7 +206,7 @@ func newProvider(ctx *Context, cfg *config.Config) (provider.Provider, error) {
 	if err != nil {
 		return nil, fmt.Errorf("não foi possível ler a URL do remote %q: %w", ctx.Git.Remote, err)
 	}
-	return provider.New(ctx.Project.Provider, ctx.Project.Path, remoteURL, cfg.Bitbucket.Token)
+	return provider.New(ctx.Project.Provider, ctx.Project.Path, remoteURL, cfg.Bitbucket.Email, cfg.Bitbucket.Token)
 }
 
 func report(results []result) error {

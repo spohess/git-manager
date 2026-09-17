@@ -7,6 +7,7 @@ import (
 )
 
 const sample = `bitbucket:
+  email: dev@acme.com
   token: token-secreto
 
 projects:
@@ -51,6 +52,9 @@ func TestParse(t *testing.T) {
 	if cfg.Projects[1].Provider != "bitbucket" {
 		t.Errorf("provider não carregado: %q", cfg.Projects[1].Provider)
 	}
+	if cfg.Bitbucket.Email != "dev@acme.com" {
+		t.Errorf("e-mail do bitbucket não carregado: %q", cfg.Bitbucket.Email)
+	}
 	if cfg.Bitbucket.Token != "token-secreto" {
 		t.Errorf("token do bitbucket não carregado: %q", cfg.Bitbucket.Token)
 	}
@@ -63,10 +67,14 @@ func TestParse(t *testing.T) {
 }
 
 func TestParseBitbucketTokenFromEnv(t *testing.T) {
+	t.Setenv("BITBUCKET_EMAIL", "env@acme.com")
 	t.Setenv("BITBUCKET_TOKEN", "do-ambiente")
 	cfg, err := Parse([]byte("projects:\n  - name: a\n    provider: bitbucket\n    path: /tmp/a\n"))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.Bitbucket.Email != "env@acme.com" {
+		t.Errorf("e-mail deveria vir da variável de ambiente, obtido %q", cfg.Bitbucket.Email)
 	}
 	if cfg.Bitbucket.Token != "do-ambiente" {
 		t.Errorf("token deveria vir da variável de ambiente, obtido %q", cfg.Bitbucket.Token)

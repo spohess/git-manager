@@ -31,11 +31,14 @@ type Provider interface {
 	AssignSelf(pr *PullRequest, dryRun bool) error
 }
 
-func Available(kind, bitbucketToken string) error {
+func Available(kind, bitbucketEmail, bitbucketToken string) error {
 	switch kind {
 	case KindGitHub:
 		return githubAvailable()
 	case KindBitbucket:
+		if strings.TrimSpace(bitbucketEmail) == "" {
+			return fmt.Errorf("e-mail do Bitbucket não configurado: defina a chave \"bitbucket.email\" no arquivo de configuração ou a variável %s", BitbucketEmailEnv)
+		}
 		if strings.TrimSpace(bitbucketToken) == "" {
 			return fmt.Errorf("token do Bitbucket não configurado: defina a chave \"bitbucket.token\" no arquivo de configuração ou a variável %s", BitbucketTokenEnv)
 		}
@@ -44,12 +47,12 @@ func Available(kind, bitbucketToken string) error {
 	return fmt.Errorf("provedor desconhecido: %q", kind)
 }
 
-func New(kind, dir, remoteURL, bitbucketToken string) (Provider, error) {
+func New(kind, dir, remoteURL, bitbucketEmail, bitbucketToken string) (Provider, error) {
 	switch kind {
 	case KindGitHub:
 		return NewGitHub(dir), nil
 	case KindBitbucket:
-		return NewBitbucket(remoteURL, bitbucketToken)
+		return NewBitbucket(remoteURL, bitbucketEmail, bitbucketToken)
 	}
 	return nil, fmt.Errorf("provedor desconhecido: %q", kind)
 }

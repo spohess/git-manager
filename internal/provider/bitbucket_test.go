@@ -40,7 +40,8 @@ type recorded struct {
 	method string
 	path   string
 	query  string
-	auth   string
+	user   string
+	pass   string
 	body   map[string]any
 }
 
@@ -48,7 +49,8 @@ func newTestBitbucket(t *testing.T, handler func(w http.ResponseWriter, r record
 	t.Helper()
 	var calls []recorded
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		call := recorded{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery, auth: r.Header.Get("Authorization")}
+		call := recorded{method: r.Method, path: r.URL.Path, query: r.URL.RawQuery}
+		call.user, call.pass, _ = r.BasicAuth()
 		if r.Body != nil {
 			_ = json.NewDecoder(r.Body).Decode(&call.body)
 		}
@@ -56,7 +58,7 @@ func newTestBitbucket(t *testing.T, handler func(w http.ResponseWriter, r record
 		handler(w, call)
 	}))
 	t.Cleanup(server.Close)
-	bb, err := NewBitbucket("git@bitbucket.org:acme/backend.git", "secreto")
+	bb, err := NewBitbucket("git@bitbucket.org:acme/backend.git", "dev@acme.com", "secreto")
 	if err != nil {
 		t.Fatalf("NewBitbucket: %v", err)
 	}
@@ -82,8 +84,8 @@ func TestBitbucketFind(t *testing.T) {
 	if call.method != http.MethodGet || call.path != "/repositories/acme/backend/pullrequests" {
 		t.Errorf("chamada inesperada: %s %s", call.method, call.path)
 	}
-	if call.auth != "Bearer secreto" {
-		t.Errorf("authorization inesperado: %s", call.auth)
+	if call.user != "dev@acme.com" || call.pass != "secreto" {
+		t.Errorf("basic auth inesperado: %s:%s", call.user, call.pass)
 	}
 	if !strings.Contains(call.query, "state=OPEN") || !strings.Contains(call.query, "source.branch.name") {
 		t.Errorf("query inesperada: %s", call.query)

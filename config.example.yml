@@ -1,4 +1,5 @@
 bitbucket:
+  email: ${BITBUCKET_EMAIL}
   token: ${BITBUCKET_TOKEN}
 
 projects:

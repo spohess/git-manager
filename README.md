@@ -16,10 +16,13 @@ Requisitos: Go 1.26+, `git`, e — para as tarefas `pr`, `review` e `fix` — o
 `provider` de cada projeto:
 
 - `github`: o `gh` (GitHub CLI) autenticado;
-- `bitbucket`: um API token do Bitbucket Cloud com os escopos
+- `bitbucket`: um API token da conta Atlassian (id.atlassian.com → Security →
+  API tokens → "Create API token with scopes") com os escopos
   `read:repository:bitbucket`, `read:pullrequest:bitbucket` e
   `write:pullrequest:bitbucket`, informado em `bitbucket.token` ou na
-  variável `BITBUCKET_TOKEN`.
+  variável `BITBUCKET_TOKEN`, junto com o e-mail da conta em `bitbucket.email`
+  ou na variável `BITBUCKET_EMAIL`. A autenticação é Basic (e-mail + token);
+  tokens de acesso de repositório/workspace não são aceitos.
 
 ## Configuração
 
@@ -27,6 +30,7 @@ Arquivo `.yml` com a lista de projetos:
 
 ```yaml
 bitbucket:
+  email: ${BITBUCKET_EMAIL}
   token: ${BITBUCKET_TOKEN}
 
 projects:
@@ -57,9 +61,10 @@ projects:
 | `branch-target` | não | branch de destino dos PRs da tarefa `pr`; sem ela, `--target` passa a ser obrigatório |
 | `commit-sufixo` | não | string acrescentada ao fim da mensagem de commit da tarefa `pr` |
 
-A chave `bitbucket.token` só é necessária se algum projeto usar
-`provider: bitbucket`. Aceita o token literal ou uma variável de ambiente
-(`${NOME}`); se estiver vazia, a variável `BITBUCKET_TOKEN` é usada. O
+As chaves `bitbucket.email` e `bitbucket.token` só são necessárias se algum
+projeto usar `provider: bitbucket`. Aceitam o valor literal ou uma variável de
+ambiente (`${NOME}`); se estiverem vazias, as variáveis `BITBUCKET_EMAIL` e
+`BITBUCKET_TOKEN` são usadas. O
 workspace e o repositório são extraídos da URL do remote `origin` (ssh ou
 https), que precisa apontar para `bitbucket.org`.
 

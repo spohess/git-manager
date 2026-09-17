@@ -131,7 +131,8 @@ Configuração:
   Sem --config o arquivo é procurado em GIT_MANAGER_CONFIG, no diretório atual
   (git-manager.yml, projects.yml, config.yml) e em ~/.config/git-manager/config.yml.
   Cada projeto exige provider: github ou bitbucket; para o bitbucket informe
-  o API token em bitbucket.token ou na variável BITBUCKET_TOKEN.
+  o e-mail da conta Atlassian em bitbucket.email (ou BITBUCKET_EMAIL) e o API
+  token em bitbucket.token (ou BITBUCKET_TOKEN).
 
 Exemplos:
   git-manager status
