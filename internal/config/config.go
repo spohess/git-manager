@@ -6,18 +6,27 @@ import (
 	"path/filepath"
 	"strings"
 
+	"git-manager/internal/provider"
 	"gopkg.in/yaml.v3"
 )
 
+var providers = []string{provider.KindGitHub, provider.KindBitbucket}
+
 type Project struct {
 	Name         string `yaml:"name"`
+	Provider     string `yaml:"provider"`
 	Path         string `yaml:"path"`
 	Main         bool   `yaml:"main"`
 	CommitSufixo string `yaml:"commit-sufixo"`
 }
 
+type Bitbucket struct {
+	Token string `yaml:"token"`
+}
+
 type Config struct {
-	Projects []Project `yaml:"projects"`
+	Bitbucket Bitbucket `yaml:"bitbucket"`
+	Projects  []Project `yaml:"projects"`
 }
 
 const envPath = "GIT_MANAGER_CONFIG"
@@ -68,6 +77,10 @@ func Parse(data []byte) (*Config, error) {
 	if len(cfg.Projects) == 0 {
 		return nil, fmt.Errorf("nenhum projeto declarado na chave \"projects\"")
 	}
+	cfg.Bitbucket.Token = strings.TrimSpace(os.ExpandEnv(cfg.Bitbucket.Token))
+	if cfg.Bitbucket.Token == "" {
+		cfg.Bitbucket.Token = strings.TrimSpace(os.Getenv(provider.BitbucketTokenEnv))
+	}
 	seen := make(map[string]bool, len(cfg.Projects))
 	for i := range cfg.Projects {
 		p := &cfg.Projects[i]
@@ -80,6 +93,11 @@ func Parse(data []byte) (*Config, error) {
 			return nil, fmt.Errorf("projeto %q está duplicado", p.Name)
 		}
 		seen[p.Name] = true
+		provider, err := normalizeProvider(p.Provider)
+		if err != nil {
+			return nil, fmt.Errorf("projeto %q: %w", p.Name, err)
+		}
+		p.Provider = provider
 		if strings.TrimSpace(p.Path) == "" {
 			return nil, fmt.Errorf("projeto %q: chave \"path\" é obrigatória", p.Name)
 		}
@@ -90,6 +108,19 @@ func Parse(data []byte) (*Config, error) {
 		p.Path = expanded
 	}
 	return &cfg, nil
+}
+
+func normalizeProvider(raw string) (string, error) {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	if raw == "" {
+		return "", fmt.Errorf("chave \"provider\" é obrigatória (aceitos: %s)", strings.Join(providers, ", "))
+	}
+	for _, known := range providers {
+		if raw == known {
+			return known, nil
+		}
+	}
+	return "", fmt.Errorf("chave \"provider\" inválida %q (aceitos: %s)", raw, strings.Join(providers, ", "))
 }
 
 func Select(cfg *Config, name string, includeNonMain bool) ([]Project, error) {

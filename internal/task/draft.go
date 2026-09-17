@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"git-manager/internal/gh"
 	"git-manager/internal/git"
 	"git-manager/internal/ui"
 )
@@ -15,7 +14,7 @@ func runDraft(ctx *Context) error {
 		return err
 	}
 
-	pr, err := gh.View(ctx.Project.Path, branch)
+	pr, err := ctx.Provider.Find(branch)
 	if err != nil {
 		return err
 	}
@@ -29,7 +28,7 @@ func runDraft(ctx *Context) error {
 	}
 
 	ui.Step("convertendo o PR #%d da branch %s para draft", pr.Number, branch)
-	if err := gh.MarkDraft(ctx.Project.Path, branch, ctx.Opts.DryRun); err != nil {
+	if err := ctx.Provider.SetDraft(pr, true, ctx.Opts.DryRun); err != nil {
 		return err
 	}
 	if ctx.Opts.DryRun {

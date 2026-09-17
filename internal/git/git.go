@@ -108,6 +108,10 @@ func (c *Client) HasRemote() bool {
 	return c.succeeds("remote", "get-url", c.Remote)
 }
 
+func (c *Client) RemoteURL() (string, error) {
+	return c.capture("remote", "get-url", c.Remote)
+}
+
 func (c *Client) CurrentBranch() (string, error) {
 	return c.capture("rev-parse", "--abbrev-ref", "HEAD")
 }

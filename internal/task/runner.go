@@ -8,8 +8,8 @@ import (
 
 	"git-manager/internal/claude"
 	"git-manager/internal/config"
-	"git-manager/internal/gh"
 	"git-manager/internal/git"
+	"git-manager/internal/provider"
 	"git-manager/internal/ui"
 )
 
@@ -22,9 +22,10 @@ type Options struct {
 }
 
 type Context struct {
-	Project config.Project
-	Git     *git.Client
-	Opts    Options
+	Project  config.Project
+	Git      *git.Client
+	Provider provider.Provider
+	Opts     Options
 
 	detail   string
 	didReset bool
@@ -35,7 +36,7 @@ type definition struct {
 	summary      string
 	needsBranch  bool
 	needsClaude  bool
-	needsGh      bool
+	needsPR      bool
 	needsRemote  bool
 	requiresRepo bool
 }
@@ -46,9 +47,9 @@ var definitions = map[string]definition{
 	"new":      {run: runNew, summary: "executa o update e cria uma nova branch (--branch=nome)", needsBranch: true, needsRemote: true, requiresRepo: true},
 	"checkout": {run: runCheckout, summary: "executa o update e faz checkout na branch informada (--branch=nome)", needsBranch: true, needsRemote: true, requiresRepo: true},
 	"prune":    {run: runPrune, summary: "fetch --prune e remove as branches locais cujo upstream foi apagado", needsRemote: true, requiresRepo: true},
-	"draft":    {run: runDraft, summary: "converte o PR da branch atual (ou --branch=nome) para draft", needsGh: true, needsRemote: true, requiresRepo: true},
-	"ready":    {run: runReady, summary: "marca o PR da branch atual (ou --branch=nome) como pronto para revisão", needsGh: true, needsRemote: true, requiresRepo: true},
-	"pr":       {run: runPR, summary: "gera a mensagem com o claude, commita, faz push e abre o PR", needsClaude: true, needsGh: true, needsRemote: true, requiresRepo: true},
+	"draft":    {run: runDraft, summary: "converte o PR da branch atual (ou --branch=nome) para draft", needsPR: true, needsRemote: true, requiresRepo: true},
+	"ready":    {run: runReady, summary: "marca o PR da branch atual (ou --branch=nome) como pronto para revisão", needsPR: true, needsRemote: true, requiresRepo: true},
+	"pr":       {run: runPR, summary: "gera a mensagem com o claude, commita, faz push e abre o PR", needsClaude: true, needsPR: true, needsRemote: true, requiresRepo: true},
 	"review":   {run: runReview, summary: "revisa o PR da branch atual com o claude", needsClaude: true, requiresRepo: true},
 	"fix":      {run: runFix, summary: "corrige os apontamentos do PR da branch atual com o claude", needsClaude: true, requiresRepo: true},
 }
@@ -97,14 +98,14 @@ func Run(cfg *config.Config, opts Options) error {
 			return err
 		}
 	}
-	if def.needsGh {
-		if err := gh.Available(); err != nil {
-			return err
-		}
-	}
 	projects, err := config.Select(cfg, opts.Project, opts.NoMain)
 	if err != nil {
 		return err
+	}
+	if def.needsPR {
+		if err := checkProviders(cfg, projects); err != nil {
+			return err
+		}
 	}
 
 	ui.Info("tarefa: %s | projetos: %d%s", opts.Name, len(projects), dryRunLabel(opts.DryRun))
@@ -117,7 +118,7 @@ func Run(cfg *config.Config, opts Options) error {
 			Git:     git.New(project.Path, opts.DryRun),
 			Opts:    opts,
 		}
-		err := execute(ctx, def)
+		err := execute(ctx, def, cfg)
 		if err != nil {
 			ui.Fail("%s: %v", project.Name, err)
 		}
@@ -133,7 +134,21 @@ func dryRunLabel(dryRun bool) string {
 	return ""
 }
 
-func execute(ctx *Context, def definition) error {
+func checkProviders(cfg *config.Config, projects []config.Project) error {
+	checked := make(map[string]bool)
+	for _, project := range projects {
+		if checked[project.Provider] {
+			continue
+		}
+		checked[project.Provider] = true
+		if err := provider.Available(project.Provider, cfg.Bitbucket.Token); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func execute(ctx *Context, def definition, cfg *config.Config) error {
 	info, err := os.Stat(ctx.Project.Path)
 	if err != nil || !info.IsDir() {
 		return fmt.Errorf("diretório inexistente: %s", ctx.Project.Path)
@@ -144,7 +159,20 @@ func execute(ctx *Context, def definition) error {
 	if def.needsRemote && !ctx.Git.HasRemote() {
 		return fmt.Errorf("o repositório não possui o remote %q", ctx.Git.Remote)
 	}
+	if def.needsPR {
+		if ctx.Provider, err = newProvider(ctx, cfg); err != nil {
+			return err
+		}
+	}
 	return def.run(ctx)
+}
+
+func newProvider(ctx *Context, cfg *config.Config) (provider.Provider, error) {
+	remoteURL, err := ctx.Git.RemoteURL()
+	if err != nil {
+		return nil, fmt.Errorf("não foi possível ler a URL do remote %q: %w", ctx.Git.Remote, err)
+	}
+	return provider.New(ctx.Project.Provider, ctx.Project.Path, remoteURL, cfg.Bitbucket.Token)
 }
 
 func report(results []result) error {

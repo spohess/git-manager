@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"git-manager/internal/claude"
-	"git-manager/internal/gh"
 	"git-manager/internal/git"
 	"git-manager/internal/ui"
 )
@@ -86,14 +85,14 @@ func generateMessage(ctx *Context) (claude.Message, error) {
 }
 
 func openPullRequest(ctx *Context, branch, mainBranch string, message claude.Message) error {
-	existing, err := gh.Current(ctx.Project.Path)
+	existing, err := ctx.Provider.Find(branch)
 	if err != nil {
 		return err
 	}
 	if existing != nil {
 		ui.Success("PR #%d já existe e foi atualizado com o push: %s", existing.Number, existing.URL)
-		if !existing.HasAssignee() {
-			if err := gh.AssignSelf(ctx.Project.Path, ctx.Opts.DryRun); err != nil {
+		if !existing.Assigned {
+			if err := ctx.Provider.AssignSelf(existing, ctx.Opts.DryRun); err != nil {
 				ui.Warn("não foi possível atribuir o PR #%d a você: %v", existing.Number, err)
 			}
 		}
@@ -102,7 +101,7 @@ func openPullRequest(ctx *Context, branch, mainBranch string, message claude.Mes
 	}
 
 	ui.Step("criando o PR em draft contra %s", mainBranch)
-	url, err := gh.Create(ctx.Project.Path, message.Title, message.Body, mainBranch, branch, ctx.Opts.DryRun)
+	url, err := ctx.Provider.Create(message.Title, message.Body, mainBranch, branch, ctx.Opts.DryRun)
 	if err != nil {
 		return err
 	}
