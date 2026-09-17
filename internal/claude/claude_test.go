@@ -58,6 +58,17 @@ func TestParseMessageSemRotulos(t *testing.T) {
 	}
 }
 
+func TestParseMessageRemoveAtribuicao(t *testing.T) {
+	raw := "title:\n```\nAjustar login\n```\n\nmessage:\n```\n## Resumo\nAjusta o login.\n\n---\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\n```\n"
+	msg, err := ParseMessage(raw)
+	if err != nil {
+		t.Fatalf("ParseMessage: %v", err)
+	}
+	if want := "## Resumo\nAjusta o login."; msg.Body != want {
+		t.Errorf("Body = %q, esperado %q", msg.Body, want)
+	}
+}
+
 func TestParseMessageBlocoUnico(t *testing.T) {
 	raw := "```\nCorrigir o webhook\n\n## Resumo\nAjusta o retorno 202.\n```\n"
 	msg, err := ParseMessage(raw)

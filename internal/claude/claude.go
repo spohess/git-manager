@@ -60,15 +60,50 @@ type Message struct {
 	Body  string
 }
 
+var attributionMarkers = []string{
+	"generated with [claude code]",
+	"claude.com/claude-code",
+	"co-authored-by: claude",
+}
+
 func ParseMessage(raw string) (Message, error) {
 	lines := strings.Split(strings.ReplaceAll(raw, "\r\n", "\n"), "\n")
 	if message, ok := parseLabeled(lines); ok {
-		return message, nil
+		return stripAttribution(message), nil
 	}
 	if message, ok := parseBlocks(lines); ok {
-		return message, nil
+		return stripAttribution(message), nil
 	}
 	return Message{}, fmt.Errorf("não foi possível extrair título e descrição da resposta do claude; esperado as seções \"title:\"/\"message:\" ou dois blocos ``` com título e descrição")
+}
+
+func stripAttribution(message Message) Message {
+	var kept []string
+	for _, line := range strings.Split(message.Body, "\n") {
+		if !isAttribution(line) {
+			kept = append(kept, line)
+		}
+	}
+	for len(kept) > 0 && isTrailingSeparator(kept[len(kept)-1]) {
+		kept = kept[:len(kept)-1]
+	}
+	message.Body = strings.Trim(strings.Join(kept, "\n"), "\n")
+	return message
+}
+
+func isTrailingSeparator(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return trimmed == "" || trimmed == "---" || trimmed == "***" || trimmed == "___"
+}
+
+func isAttribution(line string) bool {
+	normalized := strings.ToLower(line)
+	for _, marker := range attributionMarkers {
+		if strings.Contains(normalized, marker) {
+			return true
+		}
+	}
+	return false
 }
 
 func parseLabeled(lines []string) (Message, bool) {
