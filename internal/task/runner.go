@@ -8,23 +8,25 @@ import (
 
 	"git-manager/internal/claude"
 	"git-manager/internal/config"
-	"git-manager/internal/gh"
 	"git-manager/internal/git"
+	"git-manager/internal/provider"
 	"git-manager/internal/ui"
 )
 
 type Options struct {
 	Name    string
 	Branch  string
+	Target  string
 	NoMain  bool
 	Project string
 	DryRun  bool
 }
 
 type Context struct {
-	Project config.Project
-	Git     *git.Client
-	Opts    Options
+	Project  config.Project
+	Git      *git.Client
+	Provider provider.Provider
+	Opts     Options
 
 	detail   string
 	didReset bool
@@ -34,8 +36,9 @@ type definition struct {
 	run          func(*Context) error
 	summary      string
 	needsBranch  bool
+	needsTarget  bool
 	needsClaude  bool
-	needsGh      bool
+	needsPR      bool
 	needsRemote  bool
 	requiresRepo bool
 }
@@ -46,9 +49,9 @@ var definitions = map[string]definition{
 	"new":      {run: runNew, summary: "executa o update e cria uma nova branch (--branch=nome)", needsBranch: true, needsRemote: true, requiresRepo: true},
 	"checkout": {run: runCheckout, summary: "executa o update e faz checkout na branch informada (--branch=nome)", needsBranch: true, needsRemote: true, requiresRepo: true},
 	"prune":    {run: runPrune, summary: "fetch --prune e remove as branches locais cujo upstream foi apagado", needsRemote: true, requiresRepo: true},
-	"draft":    {run: runDraft, summary: "converte o PR da branch atual (ou --branch=nome) para draft", needsGh: true, needsRemote: true, requiresRepo: true},
-	"ready":    {run: runReady, summary: "marca o PR da branch atual (ou --branch=nome) como pronto para revisão", needsGh: true, needsRemote: true, requiresRepo: true},
-	"pr":       {run: runPR, summary: "gera a mensagem com o claude, commita, faz push e abre o PR", needsClaude: true, needsGh: true, needsRemote: true, requiresRepo: true},
+	"draft":    {run: runDraft, summary: "converte o PR da branch atual (ou --branch=nome) para draft", needsPR: true, needsRemote: true, requiresRepo: true},
+	"ready":    {run: runReady, summary: "marca o PR da branch atual (ou --branch=nome) como pronto para revisão", needsPR: true, needsRemote: true, requiresRepo: true},
+	"pr":       {run: runPR, summary: "gera a mensagem com o claude, commita, faz push e abre o PR contra --target ou branch-target", needsTarget: true, needsClaude: true, needsPR: true, needsRemote: true, requiresRepo: true},
 	"review":   {run: runReview, summary: "revisa o PR da branch atual com o claude", needsClaude: true, requiresRepo: true},
 	"fix":      {run: runFix, summary: "corrige os apontamentos do PR da branch atual com o claude", needsClaude: true, requiresRepo: true},
 }
@@ -97,17 +100,22 @@ func Run(cfg *config.Config, opts Options) error {
 			return err
 		}
 	}
-	if def.needsGh {
-		if err := gh.Available(); err != nil {
-			return err
-		}
-	}
 	projects, err := config.Select(cfg, opts.Project, opts.NoMain)
 	if err != nil {
 		return err
 	}
+	if def.needsPR {
+		if err := checkProviders(cfg, projects); err != nil {
+			return err
+		}
+	}
+	if def.needsTarget {
+		if opts.Target, err = resolveTarget(opts.Target, projects); err != nil {
+			return err
+		}
+	}
 
-	ui.Info("tarefa: %s | projetos: %d%s", opts.Name, len(projects), dryRunLabel(opts.DryRun))
+	ui.Info("tarefa: %s | projetos: %d%s%s", opts.Name, len(projects), targetLabel(opts.Target), dryRunLabel(opts.DryRun))
 
 	results := make([]result, 0, len(projects))
 	for _, project := range projects {
@@ -117,13 +125,40 @@ func Run(cfg *config.Config, opts Options) error {
 			Git:     git.New(project.Path, opts.DryRun),
 			Opts:    opts,
 		}
-		err := execute(ctx, def)
+		err := execute(ctx, def, cfg)
 		if err != nil {
 			ui.Fail("%s: %v", project.Name, err)
 		}
 		results = append(results, result{name: project.Name, detail: ctx.detail, err: err})
 	}
 	return report(results)
+}
+
+func targetLabel(target string) string {
+	if target == "" {
+		return ""
+	}
+	return " | destino: " + target
+}
+
+func resolveTarget(flag string, projects []config.Project) (string, error) {
+	if flag = strings.TrimSpace(flag); flag != "" {
+		return flag, nil
+	}
+	target := ""
+	for _, project := range projects {
+		if project.BranchTarget == "" {
+			return "", fmt.Errorf("projeto %q não possui \"branch-target\" na configuração; informe --target=branch", project.Name)
+		}
+		if target == "" {
+			target = project.BranchTarget
+			continue
+		}
+		if project.BranchTarget != target {
+			return "", fmt.Errorf("os projetos selecionados possuem branch-target diferentes (%s e %s); use --project para separá-los ou informe --target=branch", target, project.BranchTarget)
+		}
+	}
+	return target, nil
 }
 
 func dryRunLabel(dryRun bool) string {
@@ -133,7 +168,21 @@ func dryRunLabel(dryRun bool) string {
 	return ""
 }
 
-func execute(ctx *Context, def definition) error {
+func checkProviders(cfg *config.Config, projects []config.Project) error {
+	checked := make(map[string]bool)
+	for _, project := range projects {
+		if checked[project.Provider] {
+			continue
+		}
+		checked[project.Provider] = true
+		if err := provider.Available(project.Provider, cfg.Bitbucket.Token); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func execute(ctx *Context, def definition, cfg *config.Config) error {
 	info, err := os.Stat(ctx.Project.Path)
 	if err != nil || !info.IsDir() {
 		return fmt.Errorf("diretório inexistente: %s", ctx.Project.Path)
@@ -144,7 +193,20 @@ func execute(ctx *Context, def definition) error {
 	if def.needsRemote && !ctx.Git.HasRemote() {
 		return fmt.Errorf("o repositório não possui o remote %q", ctx.Git.Remote)
 	}
+	if def.needsPR {
+		if ctx.Provider, err = newProvider(ctx, cfg); err != nil {
+			return err
+		}
+	}
 	return def.run(ctx)
+}
+
+func newProvider(ctx *Context, cfg *config.Config) (provider.Provider, error) {
+	remoteURL, err := ctx.Git.RemoteURL()
+	if err != nil {
+		return nil, fmt.Errorf("não foi possível ler a URL do remote %q: %w", ctx.Git.Remote, err)
+	}
+	return provider.New(ctx.Project.Provider, ctx.Project.Path, remoteURL, cfg.Bitbucket.Token)
 }
 
 func report(results []result) error {

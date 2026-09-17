@@ -12,25 +12,38 @@ make install         # instala em ~/.local/bin
 ```
 
 Requisitos: Go 1.26+, `git`, e — para as tarefas `pr`, `review` e `fix` — o
-`claude` no PATH. As tarefas `pr`, `draft` e `ready` também usam o `gh` (GitHub CLI)
-autenticado.
+`claude` no PATH. As tarefas `pr`, `draft` e `ready` também precisam, conforme o
+`provider` de cada projeto:
+
+- `github`: o `gh` (GitHub CLI) autenticado;
+- `bitbucket`: um API token do Bitbucket Cloud com os escopos
+  `read:repository:bitbucket`, `read:pullrequest:bitbucket` e
+  `write:pullrequest:bitbucket`, informado em `bitbucket.token` ou na
+  variável `BITBUCKET_TOKEN`.
 
 ## Configuração
 
 Arquivo `.yml` com a lista de projetos:
 
 ```yaml
+bitbucket:
+  token: ${BITBUCKET_TOKEN}
+
 projects:
   - name: backend
+    provider: bitbucket
     path: /Users/sergio/projects/backend
     main: true
+    branch-target: develop
     commit-sufixo: teste-teste-teste
 
   - name: admin
+    provider: bitbucket
     path: /Users/sergio/projects/frontend-admin
     main: true
 
   - name: client
+    provider: github
     path: /Users/sergio/projects/frontend-client
     main: false
 ```
@@ -38,9 +51,17 @@ projects:
 | chave | obrigatória | descrição |
 | --- | --- | --- |
 | `name` | sim | nome usado em `--project=nome` |
+| `provider` | sim | `github` ou `bitbucket`; define como os PRs são criados e alterados |
 | `path` | sim | diretório do repositório (aceita `~` e variáveis de ambiente) |
 | `main` | sim | define se o projeto entra nas execuções sem `--no-main` |
+| `branch-target` | não | branch de destino dos PRs da tarefa `pr`; sem ela, `--target` passa a ser obrigatório |
 | `commit-sufixo` | não | string acrescentada ao fim da mensagem de commit da tarefa `pr` |
+
+A chave `bitbucket.token` só é necessária se algum projeto usar
+`provider: bitbucket`. Aceita o token literal ou uma variável de ambiente
+(`${NOME}`); se estiver vazia, a variável `BITBUCKET_TOKEN` é usada. O
+workspace e o repositório são extraídos da URL do remote `origin` (ssh ou
+https), que precisa apontar para `bitbucket.org`.
 
 Ordem de busca do arquivo quando `--config` não é informado:
 
@@ -63,6 +84,7 @@ git-manager <tarefa> [parâmetros]
 | `--no-main` | executa em todos os projetos, inclusive os com `main: false` |
 | `--project=nome` | executa apenas no(s) projeto(s) informado(s) (ignora o filtro de `main`) |
 | `--branch=nome` | nome da branch (obrigatório nas tarefas `new` e `checkout`; opcional nas `draft` e `ready`) |
+| `--target=nome` | branch de destino do PR na tarefa `pr`; substitui o `branch-target` do config e é obrigatório quando algum projeto selecionado não o define |
 | `--config=arquivo.yml` | caminho do arquivo de configuração |
 | `--dry-run` | imprime os comandos sem aplicar nenhuma alteração |
 
@@ -138,25 +160,34 @@ git-manager checkout --branch=feature/login --no-main
 
 #### `pr`
 
+A branch de destino do PR é o `--target`, quando informado, ou o `branch-target`
+de cada projeto no config. A execução falha antes de tocar em qualquer projeto
+se, sem `--target`, algum projeto selecionado não tiver `branch-target` ou se os
+projetos selecionados tiverem `branch-target` diferentes — a tarefa sempre usa
+um único destino para todos os projetos da execução.
+
 1. `git add --all`;
 2. gera título e descrição com
    `claude -p "@pr-message gere a mensagem das alterações no formato markdown" --allowedTools "Read,Edit,Bash,Git"`;
 3. `git commit --no-verify -m "<title> <commit-sufixo>"`;
 4. `git push --set-upstream origin <branch>` (com fallback para `--force`);
-5. `gh pr create --draft --assignee @me` usando o `title` como título e o
-   `message` como descrição — o PR é sempre aberto como draft e atribuído ao
-   usuário autenticado no `gh`.
+5. abre o PR em draft contra a branch de destino, usando o `title` como título
+   e o `message` como descrição:
+   - `github`: `gh pr create --draft --assignee @me`, atribuído ao usuário
+     autenticado no `gh`;
+   - `bitbucket`: `POST /2.0/repositories/<workspace>/<repo>/pullrequests`
+     com `draft: true` (o autor é o dono do token; Bitbucket não tem assignee).
 
-Chamadas ao `gh` que falham por indisponibilidade do GitHub (HTTP 5xx, timeout)
-são repetidas até três vezes. Se ainda assim a criação com assignee falhar, o PR
-é criado sem assignee e a atribuição é tentada em seguida com
-`gh pr edit --add-assignee @me`; persistindo o erro, um aviso pede a atribuição
-manual.
+Chamadas ao GitHub/Bitbucket que falham por indisponibilidade (HTTP 5xx,
+timeout) são repetidas até três vezes. No GitHub, se ainda assim a criação com
+assignee falhar, o PR é criado sem assignee e a atribuição é tentada em seguida
+com `gh pr edit --add-assignee @me`; persistindo o erro, um aviso pede a
+atribuição manual.
 
 Se já existir um PR aberto para a branch, o push atualiza o PR existente, a URL
-é exibida no resumo e, se ele não tiver assignee, é atribuído a você. A tarefa
-falha se a branch atual for a principal ou se não houver diferença em relação a
-ela.
+é exibida no resumo e, no GitHub, se ele não tiver assignee, é atribuído a você.
+A tarefa falha se a branch atual for a própria branch de destino, se a branch de
+destino não existir em `origin` ou se não houver diferença em relação a ela.
 
 A leitura da resposta do `claude` aceita três formatos, nesta ordem: as seções
 `title:`/`message:` (com ou sem blocos ```); dois blocos ``` sem rótulo, sendo o
@@ -167,7 +198,8 @@ bloco é recusado com erro, e a saída bruta é impressa para conferência.
 
 #### `draft`
 
-Converte para draft o PR da branch atual, usando `gh pr ready --undo`. Com
+Converte para draft o PR da branch atual, usando `gh pr ready <n> --undo`
+(GitHub) ou `PUT .../pullrequests/<n>` com `draft: true` (Bitbucket). Com
 `--branch=nome` o PR daquela branch é usado sem trocar de branch no repositório.
 
 - se não houver PR aberto para a branch, a tarefa falha;
@@ -180,7 +212,8 @@ git-manager draft --branch=SYSVET-924 --project=backend
 
 #### `ready`
 
-Marca como pronto para revisão o PR da branch atual, usando `gh pr ready`. Com
+Marca como pronto para revisão o PR da branch atual, usando `gh pr ready <n>`
+(GitHub) ou `PUT .../pullrequests/<n>` com `draft: false` (Bitbucket). Com
 `--branch=nome` o PR daquela branch é usado sem trocar de branch no repositório.
 
 - se não houver PR aberto para a branch, a tarefa falha;
@@ -195,6 +228,9 @@ git-manager ready --branch=SYSVET-924 --project=backend
 
 `claude -p "@pr-reviewer revise o pr da branch atual" --allowedTools "Read,Edit,Bash,Git"`,
 com a saída transmitida em tempo real.
+
+Os agentes `pr-reviewer` e `pr-comment-fixer` usam o `gh` internamente, portanto
+`review` e `fix` só funcionam em projetos hospedados no GitHub.
 
 #### `fix`
 
@@ -219,7 +255,8 @@ git-manager update                                  # projetos main: true
 git-manager update --no-main                        # todos os projetos
 git-manager new --branch=feature/login --no-main
 git-manager checkout --branch=feature/login --no-main
-git-manager pr --project=backend
+git-manager pr --project=backend                    # destino: branch-target do config
+git-manager pr --target=release/2.0 --no-main       # destino explícito para todos
 git-manager draft --no-main                          # PR da branch atual volta a draft
 git-manager ready --no-main                          # PR da branch atual sai do draft
 git-manager review --no-main

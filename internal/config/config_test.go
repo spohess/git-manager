@@ -6,17 +6,24 @@ import (
 	"testing"
 )
 
-const sample = `projects:
+const sample = `bitbucket:
+  token: token-secreto
+
+projects:
   - name: backend
+    provider: github
     path: /tmp/projects/backend
     main: true
     commit-sufixo: teste-teste-teste
 
   - name: admin
+    provider: bitbucket
     path: /tmp/projects/frontend-admin
     main: true
+    branch-target: develop
 
   - name: client
+    provider: github
     path: /tmp/projects/frontend-client
     main: false
 `
@@ -38,15 +45,52 @@ func TestParse(t *testing.T) {
 	if cfg.Projects[2].Main {
 		t.Errorf("projeto client deveria ter main: false")
 	}
+	if cfg.Projects[0].Provider != "github" {
+		t.Errorf("provider não carregado: %q", cfg.Projects[0].Provider)
+	}
+	if cfg.Projects[1].Provider != "bitbucket" {
+		t.Errorf("provider não carregado: %q", cfg.Projects[1].Provider)
+	}
+	if cfg.Bitbucket.Token != "token-secreto" {
+		t.Errorf("token do bitbucket não carregado: %q", cfg.Bitbucket.Token)
+	}
+	if cfg.Projects[1].BranchTarget != "develop" {
+		t.Errorf("branch-target não carregado: %q", cfg.Projects[1].BranchTarget)
+	}
+	if cfg.Projects[0].BranchTarget != "" {
+		t.Errorf("branch-target deveria ser opcional, obtido %q", cfg.Projects[0].BranchTarget)
+	}
+}
+
+func TestParseBitbucketTokenFromEnv(t *testing.T) {
+	t.Setenv("BITBUCKET_TOKEN", "do-ambiente")
+	cfg, err := Parse([]byte("projects:\n  - name: a\n    provider: bitbucket\n    path: /tmp/a\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.Bitbucket.Token != "do-ambiente" {
+		t.Errorf("token deveria vir da variável de ambiente, obtido %q", cfg.Bitbucket.Token)
+	}
+
+	t.Setenv("MEU_TOKEN", "expandido")
+	cfg, err = Parse([]byte("bitbucket:\n  token: ${MEU_TOKEN}\nprojects:\n  - name: a\n    provider: bitbucket\n    path: /tmp/a\n"))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if cfg.Bitbucket.Token != "expandido" {
+		t.Errorf("token deveria ser expandido do ambiente, obtido %q", cfg.Bitbucket.Token)
+	}
 }
 
 func TestParseInvalid(t *testing.T) {
 	cases := map[string]string{
 		"sem projetos":   "projects: []\n",
-		"sem nome":       "projects:\n  - path: /tmp/a\n    main: true\n",
-		"sem path":       "projects:\n  - name: a\n    main: true\n",
-		"nome repetido":  "projects:\n  - name: a\n    path: /tmp/a\n  - name: a\n    path: /tmp/b\n",
-		"chave inválida": "projects:\n  - name: a\n    path: /tmp/a\n    commit_sufixo: x\n",
+		"sem nome":       "projects:\n  - provider: github\n    path: /tmp/a\n    main: true\n",
+		"sem provider":   "projects:\n  - name: a\n    path: /tmp/a\n    main: true\n",
+		"sem path":       "projects:\n  - name: a\n    provider: github\n    main: true\n",
+		"nome repetido":  "projects:\n  - name: a\n    provider: github\n    path: /tmp/a\n  - name: a\n    provider: github\n    path: /tmp/b\n",
+		"chave inválida": "projects:\n  - name: a\n    provider: github\n    path: /tmp/a\n    commit_sufixo: x\n",
+		"provider":       "projects:\n  - name: a\n    provider: gitlab\n    path: /tmp/a\n",
 	}
 	for name, data := range cases {
 		if _, err := Parse([]byte(data)); err == nil {
@@ -60,7 +104,7 @@ func TestParseExpandsHome(t *testing.T) {
 	if err != nil {
 		t.Skip("sem HOME")
 	}
-	cfg, err := Parse([]byte("projects:\n  - name: a\n    path: ~/projetos/a\n    main: true\n"))
+	cfg, err := Parse([]byte("projects:\n  - name: a\n    provider: github\n    path: ~/projetos/a\n    main: true\n"))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}

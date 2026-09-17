@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"git-manager/internal/claude"
-	"git-manager/internal/gh"
 	"git-manager/internal/git"
 	"git-manager/internal/ui"
 )
@@ -22,17 +21,20 @@ func runPR(ctx *Context) error {
 	if branch == git.DetachedHead {
 		return fmt.Errorf("o repositório está em detached HEAD; faça checkout em uma branch")
 	}
-	mainBranch := repo.DefaultBranch()
-	if branch == mainBranch {
-		return fmt.Errorf("a branch atual é a principal (%s); crie uma branch com a tarefa new", mainBranch)
+	target := ctx.Opts.Target
+	if branch == target {
+		return fmt.Errorf("a branch atual é a de destino (%s); crie uma branch com a tarefa new", target)
+	}
+	if !repo.RemoteBranchExists(target) {
+		return fmt.Errorf("a branch de destino %s não existe em %s; rode a tarefa update ou confira o nome", target, repo.Remote)
 	}
 
 	dirty, err := repo.IsDirty()
 	if err != nil {
 		return err
 	}
-	if !dirty && !repo.HasCommitsAhead(mainBranch, branch) {
-		return fmt.Errorf("nenhuma alteração entre %s/%s e %s", repo.Remote, mainBranch, branch)
+	if !dirty && !repo.HasCommitsAhead(target, branch) {
+		return fmt.Errorf("nenhuma alteração entre %s/%s e %s", repo.Remote, target, branch)
 	}
 
 	if dirty {
@@ -63,7 +65,7 @@ func runPR(ctx *Context) error {
 		}
 	}
 
-	return openPullRequest(ctx, branch, mainBranch, message)
+	return openPullRequest(ctx, branch, target, message)
 }
 
 func generateMessage(ctx *Context) (claude.Message, error) {
@@ -85,15 +87,15 @@ func generateMessage(ctx *Context) (claude.Message, error) {
 	return message, nil
 }
 
-func openPullRequest(ctx *Context, branch, mainBranch string, message claude.Message) error {
-	existing, err := gh.Current(ctx.Project.Path)
+func openPullRequest(ctx *Context, branch, target string, message claude.Message) error {
+	existing, err := ctx.Provider.Find(branch)
 	if err != nil {
 		return err
 	}
 	if existing != nil {
 		ui.Success("PR #%d já existe e foi atualizado com o push: %s", existing.Number, existing.URL)
-		if !existing.HasAssignee() {
-			if err := gh.AssignSelf(ctx.Project.Path, ctx.Opts.DryRun); err != nil {
+		if !existing.Assigned {
+			if err := ctx.Provider.AssignSelf(existing, ctx.Opts.DryRun); err != nil {
 				ui.Warn("não foi possível atribuir o PR #%d a você: %v", existing.Number, err)
 			}
 		}
@@ -101,8 +103,8 @@ func openPullRequest(ctx *Context, branch, mainBranch string, message claude.Mes
 		return nil
 	}
 
-	ui.Step("criando o PR em draft contra %s", mainBranch)
-	url, err := gh.Create(ctx.Project.Path, message.Title, message.Body, mainBranch, branch, ctx.Opts.DryRun)
+	ui.Step("criando o PR em draft contra %s", target)
+	url, err := ctx.Provider.Create(message.Title, message.Body, target, branch, ctx.Opts.DryRun)
 	if err != nil {
 		return err
 	}

@@ -3,7 +3,6 @@ package task
 import (
 	"fmt"
 
-	"git-manager/internal/gh"
 	"git-manager/internal/ui"
 )
 
@@ -13,7 +12,7 @@ func runReady(ctx *Context) error {
 		return err
 	}
 
-	pr, err := gh.View(ctx.Project.Path, branch)
+	pr, err := ctx.Provider.Find(branch)
 	if err != nil {
 		return err
 	}
@@ -27,7 +26,7 @@ func runReady(ctx *Context) error {
 	}
 
 	ui.Step("marcando o PR #%d da branch %s como pronto para revisão", pr.Number, branch)
-	if err := gh.MarkReady(ctx.Project.Path, branch, ctx.Opts.DryRun); err != nil {
+	if err := ctx.Provider.SetDraft(pr, false, ctx.Opts.DryRun); err != nil {
 		return err
 	}
 	if ctx.Opts.DryRun {
