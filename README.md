@@ -34,6 +34,7 @@ projects:
     provider: bitbucket
     path: /Users/sergio/projects/backend
     main: true
+    branch-target: develop
     commit-sufixo: teste-teste-teste
 
   - name: admin
@@ -53,6 +54,7 @@ projects:
 | `provider` | sim | `github` ou `bitbucket`; define como os PRs são criados e alterados |
 | `path` | sim | diretório do repositório (aceita `~` e variáveis de ambiente) |
 | `main` | sim | define se o projeto entra nas execuções sem `--no-main` |
+| `branch-target` | não | branch de destino dos PRs da tarefa `pr`; sem ela, `--target` passa a ser obrigatório |
 | `commit-sufixo` | não | string acrescentada ao fim da mensagem de commit da tarefa `pr` |
 
 A chave `bitbucket.token` só é necessária se algum projeto usar
@@ -82,6 +84,7 @@ git-manager <tarefa> [parâmetros]
 | `--no-main` | executa em todos os projetos, inclusive os com `main: false` |
 | `--project=nome` | executa apenas no(s) projeto(s) informado(s) (ignora o filtro de `main`) |
 | `--branch=nome` | nome da branch (obrigatório nas tarefas `new` e `checkout`; opcional nas `draft` e `ready`) |
+| `--target=nome` | branch de destino do PR na tarefa `pr`; substitui o `branch-target` do config e é obrigatório quando algum projeto selecionado não o define |
 | `--config=arquivo.yml` | caminho do arquivo de configuração |
 | `--dry-run` | imprime os comandos sem aplicar nenhuma alteração |
 
@@ -157,13 +160,19 @@ git-manager checkout --branch=feature/login --no-main
 
 #### `pr`
 
+A branch de destino do PR é o `--target`, quando informado, ou o `branch-target`
+de cada projeto no config. A execução falha antes de tocar em qualquer projeto
+se, sem `--target`, algum projeto selecionado não tiver `branch-target` ou se os
+projetos selecionados tiverem `branch-target` diferentes — a tarefa sempre usa
+um único destino para todos os projetos da execução.
+
 1. `git add --all`;
 2. gera título e descrição com
    `claude -p "@pr-message gere a mensagem das alterações no formato markdown" --allowedTools "Read,Edit,Bash,Git"`;
 3. `git commit --no-verify -m "<title> <commit-sufixo>"`;
 4. `git push --set-upstream origin <branch>` (com fallback para `--force`);
-5. abre o PR em draft usando o `title` como título e o `message` como
-   descrição:
+5. abre o PR em draft contra a branch de destino, usando o `title` como título
+   e o `message` como descrição:
    - `github`: `gh pr create --draft --assignee @me`, atribuído ao usuário
      autenticado no `gh`;
    - `bitbucket`: `POST /2.0/repositories/<workspace>/<repo>/pullrequests`
@@ -177,8 +186,8 @@ atribuição manual.
 
 Se já existir um PR aberto para a branch, o push atualiza o PR existente, a URL
 é exibida no resumo e, no GitHub, se ele não tiver assignee, é atribuído a você.
-A tarefa falha se a branch atual for a principal ou se não houver diferença em
-relação a ela.
+A tarefa falha se a branch atual for a própria branch de destino, se a branch de
+destino não existir em `origin` ou se não houver diferença em relação a ela.
 
 A leitura da resposta do `claude` aceita três formatos, nesta ordem: as seções
 `title:`/`message:` (com ou sem blocos ```); dois blocos ``` sem rótulo, sendo o
@@ -246,7 +255,8 @@ git-manager update                                  # projetos main: true
 git-manager update --no-main                        # todos os projetos
 git-manager new --branch=feature/login --no-main
 git-manager checkout --branch=feature/login --no-main
-git-manager pr --project=backend
+git-manager pr --project=backend                    # destino: branch-target do config
+git-manager pr --target=release/2.0 --no-main       # destino explícito para todos
 git-manager draft --no-main                          # PR da branch atual volta a draft
 git-manager ready --no-main                          # PR da branch atual sai do draft
 git-manager review --no-main

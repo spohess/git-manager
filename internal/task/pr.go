@@ -21,17 +21,20 @@ func runPR(ctx *Context) error {
 	if branch == git.DetachedHead {
 		return fmt.Errorf("o repositório está em detached HEAD; faça checkout em uma branch")
 	}
-	mainBranch := repo.DefaultBranch()
-	if branch == mainBranch {
-		return fmt.Errorf("a branch atual é a principal (%s); crie uma branch com a tarefa new", mainBranch)
+	target := ctx.Opts.Target
+	if branch == target {
+		return fmt.Errorf("a branch atual é a de destino (%s); crie uma branch com a tarefa new", target)
+	}
+	if !repo.RemoteBranchExists(target) {
+		return fmt.Errorf("a branch de destino %s não existe em %s; rode a tarefa update ou confira o nome", target, repo.Remote)
 	}
 
 	dirty, err := repo.IsDirty()
 	if err != nil {
 		return err
 	}
-	if !dirty && !repo.HasCommitsAhead(mainBranch, branch) {
-		return fmt.Errorf("nenhuma alteração entre %s/%s e %s", repo.Remote, mainBranch, branch)
+	if !dirty && !repo.HasCommitsAhead(target, branch) {
+		return fmt.Errorf("nenhuma alteração entre %s/%s e %s", repo.Remote, target, branch)
 	}
 
 	if dirty {
@@ -62,7 +65,7 @@ func runPR(ctx *Context) error {
 		}
 	}
 
-	return openPullRequest(ctx, branch, mainBranch, message)
+	return openPullRequest(ctx, branch, target, message)
 }
 
 func generateMessage(ctx *Context) (claude.Message, error) {
@@ -84,7 +87,7 @@ func generateMessage(ctx *Context) (claude.Message, error) {
 	return message, nil
 }
 
-func openPullRequest(ctx *Context, branch, mainBranch string, message claude.Message) error {
+func openPullRequest(ctx *Context, branch, target string, message claude.Message) error {
 	existing, err := ctx.Provider.Find(branch)
 	if err != nil {
 		return err
@@ -100,8 +103,8 @@ func openPullRequest(ctx *Context, branch, mainBranch string, message claude.Mes
 		return nil
 	}
 
-	ui.Step("criando o PR em draft contra %s", mainBranch)
-	url, err := ctx.Provider.Create(message.Title, message.Body, mainBranch, branch, ctx.Opts.DryRun)
+	ui.Step("criando o PR em draft contra %s", target)
+	url, err := ctx.Provider.Create(message.Title, message.Body, target, branch, ctx.Opts.DryRun)
 	if err != nil {
 		return err
 	}

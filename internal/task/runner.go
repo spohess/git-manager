@@ -16,6 +16,7 @@ import (
 type Options struct {
 	Name    string
 	Branch  string
+	Target  string
 	NoMain  bool
 	Project string
 	DryRun  bool
@@ -35,6 +36,7 @@ type definition struct {
 	run          func(*Context) error
 	summary      string
 	needsBranch  bool
+	needsTarget  bool
 	needsClaude  bool
 	needsPR      bool
 	needsRemote  bool
@@ -49,7 +51,7 @@ var definitions = map[string]definition{
 	"prune":    {run: runPrune, summary: "fetch --prune e remove as branches locais cujo upstream foi apagado", needsRemote: true, requiresRepo: true},
 	"draft":    {run: runDraft, summary: "converte o PR da branch atual (ou --branch=nome) para draft", needsPR: true, needsRemote: true, requiresRepo: true},
 	"ready":    {run: runReady, summary: "marca o PR da branch atual (ou --branch=nome) como pronto para revisão", needsPR: true, needsRemote: true, requiresRepo: true},
-	"pr":       {run: runPR, summary: "gera a mensagem com o claude, commita, faz push e abre o PR", needsClaude: true, needsPR: true, needsRemote: true, requiresRepo: true},
+	"pr":       {run: runPR, summary: "gera a mensagem com o claude, commita, faz push e abre o PR contra --target ou branch-target", needsTarget: true, needsClaude: true, needsPR: true, needsRemote: true, requiresRepo: true},
 	"review":   {run: runReview, summary: "revisa o PR da branch atual com o claude", needsClaude: true, requiresRepo: true},
 	"fix":      {run: runFix, summary: "corrige os apontamentos do PR da branch atual com o claude", needsClaude: true, requiresRepo: true},
 }
@@ -107,8 +109,13 @@ func Run(cfg *config.Config, opts Options) error {
 			return err
 		}
 	}
+	if def.needsTarget {
+		if opts.Target, err = resolveTarget(opts.Target, projects); err != nil {
+			return err
+		}
+	}
 
-	ui.Info("tarefa: %s | projetos: %d%s", opts.Name, len(projects), dryRunLabel(opts.DryRun))
+	ui.Info("tarefa: %s | projetos: %d%s%s", opts.Name, len(projects), targetLabel(opts.Target), dryRunLabel(opts.DryRun))
 
 	results := make([]result, 0, len(projects))
 	for _, project := range projects {
@@ -125,6 +132,33 @@ func Run(cfg *config.Config, opts Options) error {
 		results = append(results, result{name: project.Name, detail: ctx.detail, err: err})
 	}
 	return report(results)
+}
+
+func targetLabel(target string) string {
+	if target == "" {
+		return ""
+	}
+	return " | destino: " + target
+}
+
+func resolveTarget(flag string, projects []config.Project) (string, error) {
+	if flag = strings.TrimSpace(flag); flag != "" {
+		return flag, nil
+	}
+	target := ""
+	for _, project := range projects {
+		if project.BranchTarget == "" {
+			return "", fmt.Errorf("projeto %q não possui \"branch-target\" na configuração; informe --target=branch", project.Name)
+		}
+		if target == "" {
+			target = project.BranchTarget
+			continue
+		}
+		if project.BranchTarget != target {
+			return "", fmt.Errorf("os projetos selecionados possuem branch-target diferentes (%s e %s); use --project para separá-los ou informe --target=branch", target, project.BranchTarget)
+		}
+	}
+	return target, nil
 }
 
 func dryRunLabel(dryRun bool) string {
