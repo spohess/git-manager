@@ -8,7 +8,7 @@ import (
 
 func checkoutContext(path, branch string) *Context {
 	ctx := newContext(path)
-	ctx.Opts = Options{Name: "checkout", Branch: branch}
+	ctx.Opts = Options{Name: "checkout", Branch: branch, Target: "main"}
 	return ctx
 }
 
@@ -72,7 +72,7 @@ func TestCheckoutBranchInexistenteFalha(t *testing.T) {
 	}
 }
 
-func TestCheckoutNaBranchPrincipal(t *testing.T) {
+func TestCheckoutNaBranchDestino(t *testing.T) {
 	_, work := newSandbox(t)
 
 	if err := runCheckout(checkoutContext(work, "main")); err != nil {

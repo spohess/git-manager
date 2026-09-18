@@ -46,7 +46,7 @@ func run(args []string) error {
 	noMain := fs.Bool("no-main", false, "executa em todos os projetos, inclusive os com main: false")
 	project := fs.String("project", "", "executa apenas no(s) projeto(s) informado(s), separados por vírgula")
 	branch := fs.String("branch", "", "nome da branch (obrigatório nas tarefas new e checkout)")
-	target := fs.String("target", "", "branch de destino do PR (obrigatório na tarefa pr sem branch-target no config)")
+	target := fs.String("target", "", "branch de destino (obrigatório nas tarefas update, new, checkout e pr sem branch-target no config)")
 	configPath := fs.String("config", "", "caminho do arquivo .yml de configuração")
 	dryRun := fs.Bool("dry-run", false, "mostra os comandos sem executar as alterações")
 	if err := fs.Parse(rest); err != nil {
@@ -122,8 +122,9 @@ Parâmetros:
                         main); aceita múltiplos nomes separados por vírgula
   --branch=nome        nome da branch (obrigatório nas tarefas new e checkout,
                         opcional nas draft e ready)
-  --target=nome        branch de destino do PR na tarefa pr; obrigatório quando
-                        algum projeto selecionado não tem branch-target no config
+  --target=nome        branch de destino nas tarefas update, new, checkout e pr;
+                        obrigatório quando algum projeto selecionado não tem
+                        branch-target no config
   --config=arquivo.yml caminho do arquivo de configuração
   --dry-run            mostra os comandos sem aplicar alterações
 
@@ -137,7 +138,7 @@ Configuração:
 Exemplos:
   git-manager status
   git-manager update
-  git-manager update --no-main
+  git-manager update --target=develop --no-main
   git-manager new --branch=feature/login --project=backend
   git-manager checkout --branch=feature/login --no-main
   git-manager pr --no-main

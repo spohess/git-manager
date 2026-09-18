@@ -55,7 +55,7 @@ func newContext(path string) *Context {
 	return &Context{
 		Project: config.Project{Name: "teste", Path: path, Main: true},
 		Git:     git.New(path, false),
-		Opts:    Options{Name: "update"},
+		Opts:    Options{Name: "update", Target: "main"},
 	}
 }
 
@@ -115,11 +115,66 @@ func TestUpdateResetaMainComAlteracoesLocais(t *testing.T) {
 	}
 }
 
+func TestUpdateFalhaSeBranchDestinoNaoExisteNoRemoto(t *testing.T) {
+	_, work := newSandbox(t)
+
+	gitRun(t, work, "checkout", "-b", "feature/x")
+	writeFile(t, work, "novo.txt", "trabalho em andamento\n")
+
+	ctx := newContext(work)
+	ctx.Opts.Target = "develop"
+	err := runUpdate(ctx)
+	if err == nil || !strings.Contains(err.Error(), "develop") {
+		t.Fatalf("esperado erro de branch de destino inexistente, obtido %v", err)
+	}
+
+	if branch := gitRun(t, work, "rev-parse", "--abbrev-ref", "HEAD"); branch != "feature/x" {
+		t.Errorf("branch atual = %q, esperado feature/x", branch)
+	}
+	if status := gitRun(t, work, "status", "--porcelain"); !strings.Contains(status, "novo.txt") {
+		t.Errorf("as alterações locais deveriam continuar pendentes: %q", status)
+	}
+}
+
+func TestUpdateUsaBranchDestinoInformada(t *testing.T) {
+	origin, work := newSandbox(t)
+
+	gitRun(t, work, "checkout", "-b", "develop")
+	writeFile(t, work, "develop.txt", "base do develop\n")
+	gitRun(t, work, "add", ".")
+	gitRun(t, work, "commit", "-m", "develop")
+	gitRun(t, work, "push", "--set-upstream", "origin", "develop")
+	gitRun(t, work, "checkout", "main")
+
+	outro := filepath.Join(filepath.Dir(work), "outro")
+	gitRun(t, filepath.Dir(work), "clone", origin, outro)
+	gitRun(t, outro, "config", "user.email", "teste@exemplo.com")
+	gitRun(t, outro, "config", "user.name", "Teste")
+	gitRun(t, outro, "checkout", "develop")
+	writeFile(t, outro, "remoto.txt", "vindo do remoto\n")
+	gitRun(t, outro, "add", ".")
+	gitRun(t, outro, "commit", "-m", "remoto")
+	gitRun(t, outro, "push", "origin", "develop")
+
+	ctx := newContext(work)
+	ctx.Opts.Target = "develop"
+	if err := runUpdate(ctx); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	if branch := gitRun(t, work, "rev-parse", "--abbrev-ref", "HEAD"); branch != "develop" {
+		t.Errorf("branch atual = %q, esperado develop", branch)
+	}
+	if _, err := os.Stat(filepath.Join(work, "remoto.txt")); err != nil {
+		t.Errorf("commit remoto do develop não foi trazido: %v", err)
+	}
+}
+
 func TestNewCriaBranchAposUpdate(t *testing.T) {
 	_, work := newSandbox(t)
 
 	ctx := newContext(work)
-	ctx.Opts = Options{Name: "new", Branch: "feature/login"}
+	ctx.Opts = Options{Name: "new", Branch: "feature/login", Target: "main"}
 	if err := runNew(ctx); err != nil {
 		t.Fatalf("new: %v", err)
 	}
