@@ -43,3 +43,14 @@ func TestResolveTarget(t *testing.T) {
 		}
 	}
 }
+
+func TestRunExigeTargetSemBranchTarget(t *testing.T) {
+	cases := []string{"update", "new", "checkout"}
+	for _, name := range cases {
+		cfg := &config.Config{Projects: []config.Project{{Name: "site", Provider: "github", Path: t.TempDir(), Main: true}}}
+		err := Run(cfg, Options{Name: name, Branch: "feature/x"})
+		if err == nil || !strings.Contains(err.Error(), "branch-target") {
+			t.Errorf("%s: esperado erro exigindo --target, obtido %v", name, err)
+		}
+	}
+}

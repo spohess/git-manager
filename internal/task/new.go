@@ -13,7 +13,7 @@ func runNew(ctx *Context) error {
 		return fmt.Errorf("informe a branch com --branch=nome-da-branch")
 	}
 
-	if _, err := update(ctx); err != nil {
+	if err := runUpdate(ctx); err != nil {
 		return err
 	}
 
