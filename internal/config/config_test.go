@@ -21,7 +21,7 @@ projects:
     provider: bitbucket
     path: /tmp/projects/frontend-admin
     main: true
-    branch-target: develop
+    major-branch: develop
 
   - name: client
     provider: github
@@ -58,11 +58,11 @@ func TestParse(t *testing.T) {
 	if cfg.Bitbucket.Token != "token-secreto" {
 		t.Errorf("token do bitbucket não carregado: %q", cfg.Bitbucket.Token)
 	}
-	if cfg.Projects[1].BranchTarget != "develop" {
-		t.Errorf("branch-target não carregado: %q", cfg.Projects[1].BranchTarget)
+	if cfg.Projects[1].MajorBranch != "develop" {
+		t.Errorf("major-branch não carregado: %q", cfg.Projects[1].MajorBranch)
 	}
-	if cfg.Projects[0].BranchTarget != "" {
-		t.Errorf("branch-target deveria ser opcional, obtido %q", cfg.Projects[0].BranchTarget)
+	if cfg.Projects[0].MajorBranch != "" {
+		t.Errorf("major-branch deveria ser opcional, obtido %q", cfg.Projects[0].MajorBranch)
 	}
 }
 

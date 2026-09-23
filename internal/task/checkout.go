@@ -18,9 +18,9 @@ func runCheckout(ctx *Context) error {
 	}
 
 	repo := ctx.Git
-	target := ctx.Opts.Target
-	if branch == target {
-		ui.Success("a branch %s é a de destino e já está atualizada", branch)
+	source := ctx.Opts.Source
+	if branch == source {
+		ui.Success("a branch %s é a de origem e já está atualizada", branch)
 		ctx.note("branch %s atualizada", branch)
 		return nil
 	}
@@ -40,13 +40,13 @@ func runCheckout(ctx *Context) error {
 		return fmt.Errorf("a branch %s não existe localmente nem em %s; use a tarefa new para criá-la", branch, repo.Remote)
 	}
 
-	ui.Step("merge de %s em %s", target, branch)
-	if err := repo.Merge(target); err != nil {
-		ctx.note("checkout na branch %s (merge de %s em conflito, resolva manualmente)", branch, target)
-		return fmt.Errorf("merge de %s em %s ficou com conflitos, resolva manualmente e finalize o commit: %w", target, branch, err)
+	ui.Step("merge de %s em %s", source, branch)
+	if err := repo.Merge(source); err != nil {
+		ctx.note("checkout na branch %s (merge de %s em conflito, resolva manualmente)", branch, source)
+		return fmt.Errorf("merge de %s em %s ficou com conflitos, resolva manualmente e finalize o commit: %w", source, branch, err)
 	}
 
-	ui.Success("branch %s em uso e atualizada com %s", branch, target)
-	ctx.note("checkout na branch %s (atualizada com %s)", branch, target)
+	ui.Success("branch %s em uso e atualizada com %s", branch, source)
+	ctx.note("checkout na branch %s (atualizada com %s)", branch, source)
 	return nil
 }

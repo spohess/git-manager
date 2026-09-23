@@ -8,7 +8,7 @@ import (
 
 func checkoutContext(path, branch string) *Context {
 	ctx := newContext(path)
-	ctx.Opts = Options{Name: "checkout", Branch: branch, Target: "main"}
+	ctx.Opts = Options{Name: "checkout", Branch: branch, Source: "main"}
 	return ctx
 }
 

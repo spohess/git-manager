@@ -55,7 +55,7 @@ func newContext(path string) *Context {
 	return &Context{
 		Project: config.Project{Name: "teste", Path: path, Main: true},
 		Git:     git.New(path, false),
-		Opts:    Options{Name: "update", Target: "main"},
+		Opts:    Options{Name: "update", Source: "main"},
 	}
 }
 
@@ -122,10 +122,10 @@ func TestUpdateFalhaSeBranchDestinoNaoExisteNoRemoto(t *testing.T) {
 	writeFile(t, work, "novo.txt", "trabalho em andamento\n")
 
 	ctx := newContext(work)
-	ctx.Opts.Target = "develop"
+	ctx.Opts.Source = "develop"
 	err := runUpdate(ctx)
 	if err == nil || !strings.Contains(err.Error(), "develop") {
-		t.Fatalf("esperado erro de branch de destino inexistente, obtido %v", err)
+		t.Fatalf("esperado erro de branch de origem inexistente, obtido %v", err)
 	}
 
 	if branch := gitRun(t, work, "rev-parse", "--abbrev-ref", "HEAD"); branch != "feature/x" {
@@ -157,7 +157,7 @@ func TestUpdateUsaBranchDestinoInformada(t *testing.T) {
 	gitRun(t, outro, "push", "origin", "develop")
 
 	ctx := newContext(work)
-	ctx.Opts.Target = "develop"
+	ctx.Opts.Source = "develop"
 	if err := runUpdate(ctx); err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestNewCriaBranchAposUpdate(t *testing.T) {
 	_, work := newSandbox(t)
 
 	ctx := newContext(work)
-	ctx.Opts = Options{Name: "new", Branch: "feature/login", Target: "main"}
+	ctx.Opts = Options{Name: "new", Branch: "feature/login", Source: "main"}
 	if err := runNew(ctx); err != nil {
 		t.Fatalf("new: %v", err)
 	}

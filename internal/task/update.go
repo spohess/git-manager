@@ -11,49 +11,49 @@ const autoCommitMessage = "processo automático"
 
 func runUpdate(ctx *Context) error {
 	repo := ctx.Git
-	target := ctx.Opts.Target
+	source := ctx.Opts.Source
 
 	if err := repo.Fetch(); err != nil {
 		ui.Warn("fetch falhou, seguindo com as referências locais: %v", err)
 	}
-	if !repo.RemoteBranchExists(target) {
-		return fmt.Errorf("a branch de destino %s não existe em %s; confira o branch-target do config ou o --target", target, repo.Remote)
+	if !repo.RemoteBranchExists(source) {
+		return fmt.Errorf("a branch de origem %s não existe em %s; confira o major-branch do config ou o --source", source, repo.Remote)
 	}
 
 	current, err := repo.CurrentBranch()
 	if err != nil {
 		return fmt.Errorf("não foi possível identificar a branch atual: %w", err)
 	}
-	ui.Step("branch atual: %s | branch de destino: %s", current, target)
+	ui.Step("branch atual: %s | branch de origem: %s", current, source)
 
-	if err := preserveLocalWork(ctx, current, target); err != nil {
+	if err := preserveLocalWork(ctx, current, source); err != nil {
 		return err
 	}
 
-	if current != target {
-		ui.Step("checkout para %s", target)
-		if err := repo.Checkout(target); err != nil {
+	if current != source {
+		ui.Step("checkout para %s", source)
+		if err := repo.Checkout(source); err != nil {
 			ui.Warn("checkout bloqueado (%v), forçando", err)
-			if err := repo.ForceCheckout(target); err != nil {
+			if err := repo.ForceCheckout(source); err != nil {
 				return err
 			}
 		}
 	}
 
-	if err := syncTarget(ctx, target); err != nil {
+	if err := syncSource(ctx, source); err != nil {
 		return err
 	}
 
-	ui.Success("%s atualizada", target)
+	ui.Success("%s atualizada", source)
 	if ctx.didReset {
-		ctx.note("branch %s atualizada via reset --hard", target)
+		ctx.note("branch %s atualizada via reset --hard", source)
 	} else {
-		ctx.note("branch %s atualizada", target)
+		ctx.note("branch %s atualizada", source)
 	}
 	return nil
 }
 
-func preserveLocalWork(ctx *Context, current, target string) error {
+func preserveLocalWork(ctx *Context, current, source string) error {
 	repo := ctx.Git
 	dirty, err := repo.IsDirty()
 	if err != nil {
@@ -62,7 +62,7 @@ func preserveLocalWork(ctx *Context, current, target string) error {
 	if !dirty {
 		return nil
 	}
-	if current == target {
+	if current == source {
 		return nil
 	}
 	if current == git.DetachedHead {
@@ -83,7 +83,7 @@ func preserveLocalWork(ctx *Context, current, target string) error {
 	return nil
 }
 
-func syncTarget(ctx *Context, target string) error {
+func syncSource(ctx *Context, source string) error {
 	repo := ctx.Git
 
 	dirty, err := repo.IsDirty()
@@ -91,26 +91,26 @@ func syncTarget(ctx *Context, target string) error {
 		return err
 	}
 	if dirty {
-		ui.Warn("%s possui alterações locais, executando reset --hard", target)
-		return resetToRemote(ctx, target)
+		ui.Warn("%s possui alterações locais, executando reset --hard", source)
+		return resetToRemote(ctx, source)
 	}
 
-	ui.Step("pull %s %s", repo.Remote, target)
-	if err := repo.Pull(target); err != nil {
+	ui.Step("pull %s %s", repo.Remote, source)
+	if err := repo.Pull(source); err != nil {
 		ui.Warn("pull bloqueado (%v), executando reset --hard", err)
-		return resetToRemote(ctx, target)
+		return resetToRemote(ctx, source)
 	}
 	return nil
 }
 
-func resetToRemote(ctx *Context, target string) error {
+func resetToRemote(ctx *Context, source string) error {
 	repo := ctx.Git
-	if !repo.RemoteBranchExists(target) {
+	if !repo.RemoteBranchExists(source) {
 		if err := repo.Fetch(); err != nil {
-			return fmt.Errorf("reset em %s/%s: %w", repo.Remote, target, err)
+			return fmt.Errorf("reset em %s/%s: %w", repo.Remote, source, err)
 		}
 	}
-	if err := repo.ResetHardRemote(target); err != nil {
+	if err := repo.ResetHardRemote(source); err != nil {
 		return err
 	}
 	ctx.didReset = true

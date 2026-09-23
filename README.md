@@ -1,7 +1,7 @@
 # git-manager
 
 CLI único em Go para operar o git em vários projetos ao mesmo tempo: atualizar a
-branch de destino, criar branches novas, alternar entre branches, abrir PRs com
+branch principal, criar branches novas, alternar entre branches, abrir PRs com
 mensagem gerada pelo `claude`, revisar e corrigir os apontamentos do PR.
 
 ## Instalação
@@ -38,7 +38,7 @@ projects:
     provider: bitbucket
     path: /Users/sergio/projects/backend
     main: true
-    branch-target: develop
+    major-branch: develop
     commit-sufixo: teste-teste-teste
 
   - name: admin
@@ -58,7 +58,7 @@ projects:
 | `provider` | sim | `github` ou `bitbucket`; define como os PRs são criados e alterados |
 | `path` | sim | diretório do repositório (aceita `~` e variáveis de ambiente) |
 | `main` | sim | define se o projeto entra nas execuções sem `--no-main` |
-| `branch-target` | não | branch de destino das tarefas `update`, `new`, `checkout` e `pr`; sem ela, `--target` passa a ser obrigatório |
+| `major-branch` | não | branch principal do projeto: origem das tarefas `update`, `new` e `checkout` e destino da tarefa `pr`; sem ela, `--source`/`--target` passam a ser obrigatórios |
 | `commit-sufixo` | não | string acrescentada ao fim da mensagem de commit da tarefa `pr` |
 
 As chaves `bitbucket.email` e `bitbucket.token` só são necessárias se algum
@@ -89,19 +89,21 @@ git-manager <tarefa> [parâmetros]
 | `--no-main` | executa em todos os projetos, inclusive os com `main: false` |
 | `--project=nome` | executa apenas no(s) projeto(s) informado(s) (ignora o filtro de `main`) |
 | `--branch=nome` | nome da branch (obrigatório nas tarefas `new` e `checkout`; opcional nas `draft` e `ready`) |
-| `--target=nome` | branch de destino nas tarefas `update`, `new`, `checkout` e `pr`; substitui o `branch-target` do config e é obrigatório quando algum projeto selecionado não o define |
+| `--source=nome` | branch de origem nas tarefas `update`, `new` e `checkout`; substitui o `major-branch` do config e é obrigatório quando algum projeto selecionado não o define |
+| `--target=nome` | branch de destino na tarefa `pr`; substitui o `major-branch` do config e é obrigatório quando algum projeto selecionado não o define |
 | `--config=arquivo.yml` | caminho do arquivo de configuração |
 | `--dry-run` | imprime os comandos sem aplicar nenhuma alteração |
 
 Sem `--no-main` e sem `--project`, a tarefa roda somente nos projetos com
 `main: true`.
 
-Nas tarefas `update`, `new`, `checkout` e `pr`, a branch de destino é o
-`--target`, quando informado, ou o `branch-target` de cada projeto no config. A
-execução falha antes de tocar em qualquer projeto se, sem `--target`, algum
-projeto selecionado não tiver `branch-target` ou se os projetos selecionados
-tiverem `branch-target` diferentes — a tarefa sempre usa um único destino para
-todos os projetos da execução.
+Nas tarefas `update`, `new` e `checkout`, a branch de origem é o `--source`,
+quando informado; na tarefa `pr`, a branch de destino é o `--target`. Sem o
+parâmetro, ambas usam o `major-branch` de cada projeto no config. A execução
+falha antes de tocar em qualquer projeto se, sem o parâmetro, algum projeto
+selecionado não tiver `major-branch` ou se os projetos selecionados tiverem
+`major-branch` diferentes — a tarefa sempre usa uma única branch para todos os
+projetos da execução.
 
 `--project` aceita múltiplos nomes separados por vírgula (ex.:
 `--project=backend,admin`), executando a tarefa em cada um deles, na ordem
@@ -128,27 +130,27 @@ git-manager status --no-main
 
 #### `update`
 
-Atualiza a branch de destino (`--target` ou `branch-target`), que precisa
+Atualiza a branch de origem (`--source` ou `major-branch`), que precisa
 existir em `origin`; caso contrário a tarefa falha sem alterar o repositório.
 
 1. `git fetch --prune origin`;
-2. se a branch atual tiver alterações não commitadas (e não for a de destino):
+2. se a branch atual tiver alterações não commitadas (e não for a de origem):
    `git add --all`, `git commit --no-verify -m "processo automático"` e
    `git push --force origin <branch>`;
-3. `git checkout <destino>` (com `--force` caso o checkout normal seja
+3. `git checkout <origem>` (com `--force` caso o checkout normal seja
    bloqueado);
-4. `git pull origin <destino>`; se a branch de destino tiver alterações locais
-   ou o pull for bloqueado, aplica `git reset --hard origin/<destino>`.
+4. `git pull origin <origem>`; se a branch de origem tiver alterações locais
+   ou o pull for bloqueado, aplica `git reset --hard origin/<origem>`.
 
 ```bash
-git-manager update                                  # destino: branch-target do config
-git-manager update --target=develop --no-main       # destino explícito para todos
+git-manager update                                  # origem: major-branch do config
+git-manager update --source=develop --no-main       # origem explícita para todos
 ```
 
 #### `new --branch=nome`
 
 Executa o `update` e em seguida `git checkout -b nome`, criando a branch a
-partir da branch de destino. Se a branch já existir localmente, apenas faz o
+partir da branch de origem. Se a branch já existir localmente, apenas faz o
 checkout nela e avisa.
 
 ```bash
@@ -165,14 +167,14 @@ branch informada:
 2. senão, se existir em `origin`: `git checkout -b <nome> --track origin/<nome>`;
 3. se não existir em nenhum dos dois, a tarefa falha e indica o uso do `new`.
 
-Depois do checkout, a branch de destino é mesclada nela com
-`git merge --no-edit <destino>`, para que a branch informada também fique
-atualizada (não só a de destino). A mensagem do merge é gerada automaticamente
+Depois do checkout, a branch de origem é mesclada nela com
+`git merge --no-edit <origem>`, para que a branch informada também fique
+atualizada (não só a de origem). A mensagem do merge é gerada automaticamente
 pelo git, sem abrir editor. Se o merge gerar conflito, a tarefa falha e o
 merge fica em andamento para resolução manual (resolva os conflitos e finalize
 com `git commit`, como em qualquer merge normal).
 
-Informar a própria branch de destino é aceito: o `update` já deixa o
+Informar a própria branch de origem é aceito: o `update` já deixa o
 repositório nela, atualizada.
 
 ```bash
@@ -181,7 +183,7 @@ git-manager checkout --branch=feature/login --no-main
 
 #### `pr`
 
-Abre o PR contra a branch de destino (`--target` ou `branch-target`).
+Abre o PR contra a branch de destino (`--target` ou `major-branch`).
 
 1. `git add --all`;
 2. gera título e descrição com
@@ -268,12 +270,12 @@ git-manager prune --no-main
 ## Exemplos
 
 ```bash
-git-manager update                                  # projetos main: true, destino: branch-target
+git-manager update                                  # projetos main: true, origem: major-branch
 git-manager update --no-main                        # todos os projetos
-git-manager update --target=develop --no-main       # destino explícito para todos
+git-manager update --source=develop --no-main       # origem explícita para todos
 git-manager new --branch=feature/login --no-main
 git-manager checkout --branch=feature/login --no-main
-git-manager pr --project=backend                    # destino: branch-target do config
+git-manager pr --project=backend                    # destino: major-branch do config
 git-manager pr --target=release/2.0 --no-main       # destino explícito para todos
 git-manager draft --no-main                          # PR da branch atual volta a draft
 git-manager ready --no-main                          # PR da branch atual sai do draft
@@ -288,12 +290,12 @@ git-manager update --no-main --dry-run              # simula, sem alterar nada
 - todos os commits usam `--no-verify`;
 - a branch principal usada pela tarefa `status` é detectada por `origin/HEAD` e,
   na ausência dela, por `main` e depois `master`; as demais tarefas usam a
-  branch de destino (`--target` ou `branch-target`);
+  `major-branch` (ou `--source`/`--target`);
 - o `commit-sufixo` é aplicado no commit da tarefa `pr`; o commit automático do
   `update` mantém a mensagem fixa `processo automático`;
-- quando a branch atual **é** a de destino e existem alterações locais, elas são
-  descartadas pelo `reset --hard origin/<destino>` (regra 5.1.b), em vez de
-  gerarem um force push na branch de destino;
+- quando a branch atual **é** a de origem e existem alterações locais, elas são
+  descartadas pelo `reset --hard origin/<origem>` (regra 5.1.b), em vez de
+  gerarem um force push na branch de origem;
 - os projetos são processados em sequência e o resumo final lista o resultado de
   cada um; o processo sai com código 1 se algum projeto falhar.
 

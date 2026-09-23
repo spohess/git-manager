@@ -16,6 +16,7 @@ import (
 type Options struct {
 	Name    string
 	Branch  string
+	Source  string
 	Target  string
 	NoMain  bool
 	Project string
@@ -36,6 +37,7 @@ type definition struct {
 	run          func(*Context) error
 	summary      string
 	needsBranch  bool
+	needsSource  bool
 	needsTarget  bool
 	needsClaude  bool
 	needsPR      bool
@@ -45,13 +47,13 @@ type definition struct {
 
 var definitions = map[string]definition{
 	"status":   {run: runStatus, summary: "mostra o status atual do repositório (branch, alterações locais e sincronismo com o remoto)", needsRemote: true, requiresRepo: true},
-	"update":   {run: runUpdate, summary: "checkout na branch de destino (--target ou branch-target) e pull, preservando o trabalho local", needsTarget: true, needsRemote: true, requiresRepo: true},
-	"new":      {run: runNew, summary: "executa o update e cria uma nova branch (--branch=nome)", needsBranch: true, needsTarget: true, needsRemote: true, requiresRepo: true},
-	"checkout": {run: runCheckout, summary: "executa o update e faz checkout na branch informada (--branch=nome)", needsBranch: true, needsTarget: true, needsRemote: true, requiresRepo: true},
+	"update":   {run: runUpdate, summary: "checkout na branch de origem (--source ou major-branch) e pull, preservando o trabalho local", needsSource: true, needsRemote: true, requiresRepo: true},
+	"new":      {run: runNew, summary: "executa o update e cria uma nova branch (--branch=nome)", needsBranch: true, needsSource: true, needsRemote: true, requiresRepo: true},
+	"checkout": {run: runCheckout, summary: "executa o update e faz checkout na branch informada (--branch=nome)", needsBranch: true, needsSource: true, needsRemote: true, requiresRepo: true},
 	"prune":    {run: runPrune, summary: "fetch --prune e remove as branches locais cujo upstream foi apagado", needsRemote: true, requiresRepo: true},
 	"draft":    {run: runDraft, summary: "converte o PR da branch atual (ou --branch=nome) para draft", needsPR: true, needsRemote: true, requiresRepo: true},
 	"ready":    {run: runReady, summary: "marca o PR da branch atual (ou --branch=nome) como pronto para revisão", needsPR: true, needsRemote: true, requiresRepo: true},
-	"pr":       {run: runPR, summary: "gera a mensagem com o claude, commita, faz push e abre o PR contra --target ou branch-target", needsTarget: true, needsClaude: true, needsPR: true, needsRemote: true, requiresRepo: true},
+	"pr":       {run: runPR, summary: "gera a mensagem com o claude, commita, faz push e abre o PR contra --target ou major-branch", needsTarget: true, needsClaude: true, needsPR: true, needsRemote: true, requiresRepo: true},
 	"review":   {run: runReview, summary: "revisa o PR da branch atual com o claude", needsClaude: true, requiresRepo: true},
 	"fix":      {run: runFix, summary: "corrige os apontamentos do PR da branch atual com o claude", needsClaude: true, requiresRepo: true},
 }
@@ -109,13 +111,18 @@ func Run(cfg *config.Config, opts Options) error {
 			return err
 		}
 	}
+	if def.needsSource {
+		if opts.Source, err = resolveMajorBranch("source", opts.Source, projects); err != nil {
+			return err
+		}
+	}
 	if def.needsTarget {
-		if opts.Target, err = resolveTarget(opts.Target, projects); err != nil {
+		if opts.Target, err = resolveMajorBranch("target", opts.Target, projects); err != nil {
 			return err
 		}
 	}
 
-	ui.Info("tarefa: %s | projetos: %d%s%s", opts.Name, len(projects), targetLabel(opts.Target), dryRunLabel(opts.DryRun))
+	ui.Info("tarefa: %s | projetos: %d%s%s", opts.Name, len(projects), branchLabel(opts), dryRunLabel(opts.DryRun))
 
 	results := make([]result, 0, len(projects))
 	for _, project := range projects {
@@ -134,31 +141,34 @@ func Run(cfg *config.Config, opts Options) error {
 	return report(results)
 }
 
-func targetLabel(target string) string {
-	if target == "" {
-		return ""
+func branchLabel(opts Options) string {
+	switch {
+	case opts.Source != "":
+		return " | origem: " + opts.Source
+	case opts.Target != "":
+		return " | destino: " + opts.Target
 	}
-	return " | destino: " + target
+	return ""
 }
 
-func resolveTarget(flag string, projects []config.Project) (string, error) {
-	if flag = strings.TrimSpace(flag); flag != "" {
-		return flag, nil
+func resolveMajorBranch(flagName, value string, projects []config.Project) (string, error) {
+	if value = strings.TrimSpace(value); value != "" {
+		return value, nil
 	}
-	target := ""
+	branch := ""
 	for _, project := range projects {
-		if project.BranchTarget == "" {
-			return "", fmt.Errorf("projeto %q não possui \"branch-target\" na configuração; informe --target=branch", project.Name)
+		if project.MajorBranch == "" {
+			return "", fmt.Errorf("projeto %q não possui \"major-branch\" na configuração; informe --%s=branch", project.Name, flagName)
 		}
-		if target == "" {
-			target = project.BranchTarget
+		if branch == "" {
+			branch = project.MajorBranch
 			continue
 		}
-		if project.BranchTarget != target {
-			return "", fmt.Errorf("os projetos selecionados possuem branch-target diferentes (%s e %s); use --project para separá-los ou informe --target=branch", target, project.BranchTarget)
+		if project.MajorBranch != branch {
+			return "", fmt.Errorf("os projetos selecionados possuem major-branch diferentes (%s e %s); use --project para separá-los ou informe --%s=branch", branch, project.MajorBranch, flagName)
 		}
 	}
-	return target, nil
+	return branch, nil
 }
 
 func dryRunLabel(dryRun bool) string {

@@ -7,11 +7,11 @@ import (
 	"git-manager/internal/config"
 )
 
-func TestResolveTarget(t *testing.T) {
-	backend := config.Project{Name: "backend", BranchTarget: "develop"}
-	admin := config.Project{Name: "admin", BranchTarget: "develop"}
-	client := config.Project{Name: "client", BranchTarget: "main"}
-	semTarget := config.Project{Name: "site"}
+func TestResolveMajorBranch(t *testing.T) {
+	backend := config.Project{Name: "backend", MajorBranch: "develop"}
+	admin := config.Project{Name: "admin", MajorBranch: "develop"}
+	client := config.Project{Name: "client", MajorBranch: "main"}
+	semMajor := config.Project{Name: "site"}
 
 	cases := []struct {
 		name     string
@@ -21,13 +21,13 @@ func TestResolveTarget(t *testing.T) {
 		wantErr  string
 	}{
 		{name: "flag prevalece", flag: "release", projects: []config.Project{backend, client}, want: "release"},
-		{name: "flag com espaços", flag: "  release ", projects: []config.Project{semTarget}, want: "release"},
-		{name: "branch-target único", projects: []config.Project{backend, admin}, want: "develop"},
-		{name: "branch-target diferentes", projects: []config.Project{backend, client}, wantErr: "branch-target diferentes"},
-		{name: "sem branch-target", projects: []config.Project{backend, semTarget}, wantErr: `"site" não possui "branch-target"`},
+		{name: "flag com espaços", flag: "  release ", projects: []config.Project{semMajor}, want: "release"},
+		{name: "major-branch único", projects: []config.Project{backend, admin}, want: "develop"},
+		{name: "major-branch diferentes", projects: []config.Project{backend, client}, wantErr: "major-branch diferentes"},
+		{name: "sem major-branch", projects: []config.Project{backend, semMajor}, wantErr: `"site" não possui "major-branch"`},
 	}
 	for _, tc := range cases {
-		got, err := resolveTarget(tc.flag, tc.projects)
+		got, err := resolveMajorBranch("target", tc.flag, tc.projects)
 		if tc.wantErr != "" {
 			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 				t.Errorf("%s: esperado erro contendo %q, obtido %v", tc.name, tc.wantErr, err)
@@ -44,13 +44,13 @@ func TestResolveTarget(t *testing.T) {
 	}
 }
 
-func TestRunExigeTargetSemBranchTarget(t *testing.T) {
+func TestRunExigeTargetSemMajorBranch(t *testing.T) {
 	cases := []string{"update", "new", "checkout"}
 	for _, name := range cases {
 		cfg := &config.Config{Projects: []config.Project{{Name: "site", Provider: "github", Path: t.TempDir(), Main: true}}}
 		err := Run(cfg, Options{Name: name, Branch: "feature/x"})
-		if err == nil || !strings.Contains(err.Error(), "branch-target") {
-			t.Errorf("%s: esperado erro exigindo --target, obtido %v", name, err)
+		if err == nil || !strings.Contains(err.Error(), "--source") {
+			t.Errorf("%s: esperado erro exigindo --source, obtido %v", name, err)
 		}
 	}
 }

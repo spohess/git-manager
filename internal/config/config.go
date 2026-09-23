@@ -17,7 +17,7 @@ type Project struct {
 	Provider     string `yaml:"provider"`
 	Path         string `yaml:"path"`
 	Main         bool   `yaml:"main"`
-	BranchTarget string `yaml:"branch-target"`
+	MajorBranch  string `yaml:"major-branch"`
 	CommitSufixo string `yaml:"commit-sufixo"`
 }
 
@@ -85,7 +85,7 @@ func Parse(data []byte) (*Config, error) {
 	for i := range cfg.Projects {
 		p := &cfg.Projects[i]
 		p.Name = strings.TrimSpace(p.Name)
-		p.BranchTarget = strings.TrimSpace(p.BranchTarget)
+		p.MajorBranch = strings.TrimSpace(p.MajorBranch)
 		p.CommitSufixo = strings.TrimSpace(p.CommitSufixo)
 		if p.Name == "" {
 			return nil, fmt.Errorf("projeto #%d: chave \"name\" é obrigatória", i+1)
